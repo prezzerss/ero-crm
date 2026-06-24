@@ -109,6 +109,30 @@ export async function saveEmailReview(emailId: string, formData: FormData) {
   redirect(`/inbox/message/${emailId}`);
 }
 
+export async function autoSaveEmailReview(emailId: string, formData: FormData) {
+  let payload = buildEmailReviewPayload(formData);
+  let { error } = await supabase
+    .from("inbound_emails")
+    .update(payload)
+    .eq("id", emailId);
+
+  if (error && isMissingThreadColumnError(error.message)) {
+    payload = buildEmailReviewPayload(formData, false);
+    const fallbackResult = await supabase
+      .from("inbound_emails")
+      .update(payload)
+      .eq("id", emailId);
+
+    error = fallbackResult.error;
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidateInboxPaths(emailId);
+}
+
 export async function linkInboxItemToContact(contactId: string, formData: FormData) {
   const emailId = cleanString(formData.get("email_id"));
   const companyId = cleanString(formData.get("company_id"));

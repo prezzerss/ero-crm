@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
+import { formatStatus } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import { saveEmailReview } from "../../../emails/actions";
 
 type EmailRecord = {
   id: string;
@@ -18,16 +19,17 @@ type EmailRecord = {
   contact_id?: string | null;
   company_id?: string | null;
   received_at?: string | null;
+  conversation_id?: string | null;
 };
 
-type ContactOption = {
+type LinkedContact = {
   id: string;
   first_name?: string | null;
   last_name?: string | null;
   email?: string | null;
 };
 
-type CompanyOption = {
+type LinkedCompany = {
   id: string;
   name: string;
 };
@@ -38,13 +40,19 @@ type EmailDetailPageProps = {
   }>;
 };
 
-const statusOptions = [
-  { value: "new", label: "New" },
-  { value: "reviewing", label: "Reviewing" },
-  { value: "follow_up", label: "Follow up" },
-  { value: "linked", label: "Linked" },
-  { value: "ignored", label: "Ignored" },
-];
+function getThreadKey(email: EmailRecord) {
+  return email.conversation_id || email.job_number || email.thread_subject;
+}
+
+function getThreadHref(email: EmailRecord) {
+  const threadKey = getThreadKey(email);
+
+  if (!threadKey || !email.source_inbox) {
+    return null;
+  }
+
+  return `/inbox/${email.source_inbox}/thread/${encodeURIComponent(threadKey)}`;
+}
 
 function getSourceLabel(source?: string | null) {
   if (source === "projects") {
@@ -68,10 +76,6 @@ function getSourceHref(source?: string | null) {
   }
 
   return "/inbox";
-}
-
-function getContactName(contact: ContactOption) {
-  return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.email || "";
 }
 
 function splitSenderName(name?: string | null) {
@@ -115,30 +119,17 @@ function createContactHref(email: EmailRecord) {
   return `/contacts/new?${params.toString()}`;
 }
 
-function extractJobNumber(subject?: string | null) {
-  if (!subject) {
-    return "";
-  }
-
-  const match =
-    subject.match(/\b(?:job|project)\s*#?:?\s*([a-z0-9-]+)/i) ??
-    subject.match(/\b([a-z]{2,}-\d{2,}|\d{3,})\b/i);
-
-  return match?.[1]?.toUpperCase() ?? "";
-}
-
-function getDefaultThreadSubject(email: EmailRecord) {
-  if (email.thread_subject) {
-    return email.thread_subject;
-  }
-
-  const jobNumber = email.job_number ?? extractJobNumber(email.subject);
-
-  if (email.source_inbox === "projects" && jobNumber && email.subject) {
-    return `${jobNumber} - ${email.subject}`;
-  }
-
-  return email.subject ?? "";
+function cleanEmailBody(value?: string | null) {
+  return (value ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function formatDate(value?: string | null) {
@@ -161,130 +152,163 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function buildReplyHref(email: EmailRecord) {
+  if (!email.from_email) {
+    return null;
+  }
+
+  const subject = email.subject?.trim().toLowerCase().startsWith("re:")
+    ? email.subject
+    : `Re: ${email.subject || "Easy Read Online enquiry"}`;
+
+  return `mailto:${email.from_email}?subject=${encodeURIComponent(subject)}`;
+}
+
+function getContactName(contact?: LinkedContact | null) {
+  if (!contact) {
+    return "";
+  }
+
+  return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.email || "";
+}
+
+function DetailRow({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="crm-info-row">
+      <span className="crm-info-label">{label}</span>
+      <span className="crm-info-value">{children}</span>
+    </div>
+  );
+}
+
 export default async function InboxMessagePage({ params }: EmailDetailPageProps) {
   const { id } = await params;
 
-  const [{ data: email }, { data: contacts }, { data: companies }] = await Promise.all([
-    supabase.from("inbound_emails").select("*").eq("id", id).single(),
-    supabase.from("contacts").select("id, first_name, last_name, email").order("first_name"),
-    supabase.from("companies").select("id, name").order("name"),
-  ]);
+  const { data: email } = await supabase.from("inbound_emails").select("*").eq("id", id).single();
 
   if (!email) {
     notFound();
   }
 
   const typedEmail = email as EmailRecord;
-  const contactOptions = (contacts ?? []) as ContactOption[];
-  const companyOptions = (companies ?? []) as CompanyOption[];
+  const [{ data: linkedContact }, { data: linkedCompany }] = await Promise.all([
+    typedEmail.contact_id
+      ? supabase
+          .from("contacts")
+          .select("id, first_name, last_name, email")
+          .eq("id", typedEmail.contact_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    typedEmail.company_id
+      ? supabase
+          .from("companies")
+          .select("id, name")
+          .eq("id", typedEmail.company_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const threadHref = getThreadHref(typedEmail);
+  const replyHref = buildReplyHref(typedEmail);
+  const messageBody = cleanEmailBody(typedEmail.body || typedEmail.snippet);
+  const contact = linkedContact as LinkedContact | null;
+  const company = linkedCompany as LinkedCompany | null;
 
   return (
     <div className="grid gap-8">
-      <header className="crm-detail-hero p-6 md:p-8">
-        <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Link href={getSourceHref(typedEmail.source_inbox)} className="font-bold underline">
-              Back to {getSourceLabel(typedEmail.source_inbox)}
-            </Link>
-
-            <h1 className="crm-page-title mt-4">{typedEmail.subject || "No subject"}</h1>
-            <p className="crm-muted mt-3 font-bold">
-              {typedEmail.from_name || "Unknown sender"} / {typedEmail.from_email || "No email"} /{" "}
-              {formatDate(typedEmail.received_at)}
-            </p>
-          </div>
-
-          <Link className="crm-button crm-button-primary" href={createContactHref(typedEmail)}>
-            Create contact
-          </Link>
-        </div>
+      <header>
+        <Link href={getSourceHref(typedEmail.source_inbox)} className="font-bold underline">
+          Back to {getSourceLabel(typedEmail.source_inbox)}
+        </Link>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
-        <article className="crm-card p-6">
-          <h2 className="crm-section-title">Message</h2>
-          {typedEmail.snippet && (
-            <p className="crm-muted mt-3 font-bold">{typedEmail.snippet}</p>
-          )}
-          <div className="crm-muted mt-6 whitespace-pre-wrap">
-            {typedEmail.body || "No message body stored."}
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_360px]">
+        <article className="crm-card p-6 md:p-8">
+          <div className="flex flex-wrap gap-2">
+            <span className="crm-status-pill">{getSourceLabel(typedEmail.source_inbox)}</span>
+            <span className="crm-status-pill crm-status-pill-yellow">
+              {formatStatus(typedEmail.status, "New")}
+            </span>
+          </div>
+
+          <h1 className="crm-page-title mt-4">{typedEmail.subject || "No subject"}</h1>
+
+          <div className="mt-5 grid gap-2 border-b border-[var(--border-soft)] pb-5">
+            <p className="font-black">
+              {typedEmail.from_name || "Unknown sender"}
+            </p>
+            <p className="crm-muted break-words font-bold">
+              {typedEmail.from_email || "No email address"}
+            </p>
+            <p className="crm-muted font-bold">{formatDate(typedEmail.received_at)}</p>
+          </div>
+
+          <div className="crm-message-body mt-6 break-words">
+            {messageBody || "No message body stored."}
           </div>
         </article>
 
-        <form action={saveEmailReview.bind(null, id)} className="crm-card grid gap-5 p-6">
-          <h2 className="crm-section-title">Review</h2>
+        <aside className="crm-card h-fit p-6">
+          <div>
+            <h2 className="crm-section-title">Email details</h2>
+            <div className="crm-info-grid mt-5">
+              <DetailRow label="Source">
+                <Link href={getSourceHref(typedEmail.source_inbox)} className="font-bold underline">
+                  {getSourceLabel(typedEmail.source_inbox)}
+                </Link>
+              </DetailRow>
 
-          <label className="grid gap-2 font-bold">
-            <span>Status</span>
-            <select className="crm-input" defaultValue={typedEmail.status ?? "new"} name="status">
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              <DetailRow label="Status">{formatStatus(typedEmail.status, "New")}</DetailRow>
 
-          <label className="grid gap-2 font-bold">
-            <span>Contact</span>
-            <select className="crm-input" defaultValue={typedEmail.contact_id ?? ""} name="contact_id">
-              <option value="">No contact linked</option>
-              {contactOptions.map((contact) => (
-                <option key={contact.id} value={contact.id}>
-                  {getContactName(contact)}
-                </option>
-              ))}
-            </select>
-          </label>
+              <DetailRow label="Linked contact">
+                {contact ? (
+                  <Link href={`/contacts/${contact.id}`} className="font-bold underline">
+                    {getContactName(contact)}
+                  </Link>
+                ) : (
+                  <span className="crm-muted">No contact linked</span>
+                )}
+              </DetailRow>
 
-          <label className="grid gap-2 font-bold">
-            <span>Company</span>
-            <select className="crm-input" defaultValue={typedEmail.company_id ?? ""} name="company_id">
-              <option value="">No company linked</option>
-              {companyOptions.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <DetailRow label="Linked company">
+                {company ? (
+                  <Link href={`/companies/${company.id}`} className="font-bold underline">
+                    {company.name}
+                  </Link>
+                ) : (
+                  <span className="crm-muted">No company linked</span>
+                )}
+              </DetailRow>
 
-          <input name="subject" type="hidden" value={typedEmail.subject ?? ""} />
+              <DetailRow label="Thread">
+                {threadHref ? (
+                  <Link href={threadHref} className="font-bold underline">
+                    View thread
+                  </Link>
+                ) : (
+                  <span className="crm-muted">No thread linked</span>
+                )}
+              </DetailRow>
+            </div>
+          </div>
 
-          <label className="grid gap-2 font-bold">
-            <span>Job number</span>
-            <input
-              className="crm-input"
-              defaultValue={typedEmail.job_number ?? extractJobNumber(typedEmail.subject)}
-              name="job_number"
-              placeholder="Example: 2451"
-            />
-          </label>
+          <div className="mt-6 grid gap-3">
+            <Link className="crm-button crm-button-primary" href={createContactHref(typedEmail)}>
+              Create contact
+            </Link>
 
-          <label className="grid gap-2 font-bold">
-            <span>Thread subject</span>
-            <input
-              className="crm-input"
-              defaultValue={getDefaultThreadSubject(typedEmail)}
-              name="thread_subject"
-              placeholder="Short thread name"
-            />
-          </label>
-
-          <label className="grid gap-2 font-bold">
-            <span>Notes</span>
-            <textarea
-              className="crm-input min-h-32"
-              defaultValue={typedEmail.notes ?? ""}
-              name="notes"
-              placeholder="Follow-up notes, quote context, list decisions..."
-            />
-          </label>
-
-          <button className="crm-button crm-button-primary" type="submit">
-            Save review
-          </button>
-        </form>
+            {replyHref && (
+              <a className="crm-button" href={replyHref}>
+                Reply by email
+              </a>
+            )}
+          </div>
+        </aside>
       </section>
     </div>
   );

@@ -457,6 +457,69 @@ select {
   gap: 16px;
 }
 
+.crm-autosave-note {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.crm-message-body {
+  color: var(--text-primary);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.crm-thread-timeline {
+  position: relative;
+  display: grid;
+  gap: 18px;
+}
+
+.crm-thread-message {
+  position: relative;
+  border: 1px solid var(--border-soft);
+  border-left: 6px solid var(--brand-teal);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.crm-thread-message:nth-child(2n) {
+  border-left-color: var(--brand-yellow);
+}
+
+.crm-thread-number {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--brand-teal-soft);
+  color: var(--brand-teal-dark);
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.crm-thread-group {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(1, 151, 157, 0.05), rgba(247, 168, 35, 0.08)),
+    #ffffff;
+  padding: 16px;
+}
+
+.crm-thread-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
 .crm-auth-page {
   position: relative;
   z-index: 1;

@@ -14,9 +14,10 @@ function isPublicPath(pathname: string) {
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-if (pathname === "/api/inbox/sync") {
-  return NextResponse.next();
-}
+  if (pathname === "/api/inbox/sync") {
+    return NextResponse.next();
+  }
+
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", request.nextUrl.pathname);
 

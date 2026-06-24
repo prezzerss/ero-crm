@@ -26,6 +26,7 @@ type ContactTagRow = {
 
 type ContactsPageProps = {
   searchParams: Promise<{
+    page?: string;
     q?: string;
     source?: string;
     status?: string;
@@ -47,6 +48,54 @@ const mailingOptions = [
   { value: "no", label: "No list" },
   { value: "unknown", label: "Unknown" },
 ];
+
+const PAGE_SIZE = 25;
+
+function getCurrentPage(page?: string) {
+  const parsedPage = Number(page ?? "1");
+
+  if (!Number.isFinite(parsedPage) || parsedPage < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedPage);
+}
+
+function buildPageHref(
+  page: number,
+  values: {
+    mailing: string;
+    query: string;
+    source: string;
+    status: string;
+  },
+) {
+  const params = new URLSearchParams();
+
+  if (values.query) {
+    params.set("q", values.query);
+  }
+
+  if (values.source !== "all") {
+    params.set("source", values.source);
+  }
+
+  if (values.status !== "all") {
+    params.set("status", values.status);
+  }
+
+  if (values.mailing !== "all") {
+    params.set("mailing", values.mailing);
+  }
+
+  if (page > 1) {
+    params.set("page", String(page));
+  }
+
+  const queryString = params.toString();
+
+  return queryString ? `/contacts?${queryString}` : "/contacts";
+}
 
 function readString(contact: ContactRecord, keys: string[]) {
   for (const key of keys) {
@@ -270,6 +319,7 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
   const selectedSource = params.source ?? "all";
   const selectedStatus = params.status ?? "all";
   const selectedMailing = params.mailing ?? "all";
+  const requestedPage = getCurrentPage(params.page);
 
   const { data, error } = await supabase
     .from("contacts")
@@ -356,6 +406,17 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
     selectedSource !== "all" ||
     selectedStatus !== "all" ||
     selectedMailing !== "all";
+  const totalPages = Math.max(1, Math.ceil(filteredContacts.length / PAGE_SIZE));
+  const currentPage = Math.min(requestedPage, totalPages);
+  const from = (currentPage - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE;
+  const paginatedContacts = filteredContacts.slice(from, to);
+  const pageValues = {
+    mailing: selectedMailing,
+    query,
+    source: selectedSource,
+    status: selectedStatus,
+  };
 
   return (
     <div className="grid gap-8">
@@ -443,7 +504,8 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
           <p className="crm-muted font-bold">
-            Showing {filteredContacts.length} of {contacts.length}
+            Showing {paginatedContacts.length ? from + 1 : 0}-{Math.min(to, filteredContacts.length)} of{" "}
+            {filteredContacts.length}
           </p>
           <div className="flex flex-wrap gap-2">
             <span className="crm-status-pill">projects@ {projectsCount}</span>
@@ -466,7 +528,7 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
             </thead>
 
             <tbody>
-              {filteredContacts.map((contact) => {
+              {paginatedContacts.map((contact) => {
                 const company = getCompany(contact);
                 const tags = getTags(contact);
                 const mailingStatus = getMailingStatus(contact);
@@ -537,6 +599,32 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-4 py-3">
+          <p className="crm-muted font-bold">25 contacts per page</p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {currentPage > 1 ? (
+              <Link className="crm-button" href={buildPageHref(currentPage - 1, pageValues)}>
+                Previous
+              </Link>
+            ) : (
+              <span className="crm-button opacity-50">Previous</span>
+            )}
+
+            <span className="crm-muted font-bold">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            {currentPage < totalPages ? (
+              <Link className="crm-button" href={buildPageHref(currentPage + 1, pageValues)}>
+                Next
+              </Link>
+            ) : (
+              <span className="crm-button opacity-50">Next</span>
+            )}
+          </div>
         </div>
       </section>
     </div>

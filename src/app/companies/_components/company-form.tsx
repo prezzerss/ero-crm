@@ -13,6 +13,8 @@ type CompanyFormProps = {
     billing_email?: string | null;
     billing_address?: string | null;
     notes?: string | null;
+    domain?: string | null;
+    auto_created?: boolean | null;
   } | null;
   mode: "create" | "edit";
 };
@@ -46,6 +48,16 @@ export function CompanyForm({ action, cancelHref, company, mode }: CompanyFormPr
           <span>Status</span>
           <input className="crm-input" defaultValue={company?.status ?? "Active"} name="status" />
         </label>
+
+        <label className="grid gap-2 font-bold">
+  <span>Email domain</span>
+  <input
+    className="crm-input"
+    defaultValue={company?.domain ?? ""}
+    name="domain"
+    placeholder="example.org.uk"
+  />
+</label>
 
         <label className="grid gap-2 font-bold">
           <span>Website</span>

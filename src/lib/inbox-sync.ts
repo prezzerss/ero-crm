@@ -110,6 +110,99 @@ function extractJobNumber(subject?: string | null) {
   return match?.[1]?.toUpperCase() ?? null;
 }
 
+const publicEmailDomains = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "outlook.com",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "icloud.com",
+  "me.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+]);
+
+const lifecycleTags = ["active", "inactive", "offline"] as const;
+
+type LifecycleStatus = (typeof lifecycleTags)[number];
+
+type ContactSyncResult = {
+  id: string | null;
+  companyId: string | null;
+  created: boolean;
+};
+
+function getEmailDomain(email: string | null) {
+  const domain = email?.split("@")[1]?.trim().toLowerCase();
+
+  if (!domain) {
+    return null;
+  }
+
+  if (domain === "easy-read-online.co.uk") {
+    return null;
+  }
+
+  if (publicEmailDomains.has(domain)) {
+    return null;
+  }
+
+  return domain;
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function companyNameFromDomain(domain: string) {
+  const parts = domain.split(".").filter(Boolean);
+
+  let base = parts[0] ?? domain;
+
+  if (
+    domain.endsWith(".gov.uk") ||
+    domain.endsWith(".ac.uk") ||
+    domain.endsWith(".nhs.uk")
+  ) {
+    base = parts.slice(0, -2).join(" ") || base;
+  }
+
+  return titleCase(base.replace(/[-_]+/g, " "));
+}
+
+function getLifecycleStatus(lastContactedAt?: string | null): LifecycleStatus {
+  if (!lastContactedAt) {
+    return "offline";
+  }
+
+  const lastContactedTime = new Date(lastContactedAt).getTime();
+
+  if (Number.isNaN(lastContactedTime)) {
+    return "offline";
+  }
+
+  const ageMs = Date.now() - lastContactedTime;
+  const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+  const threeMonthsMs = 90 * 24 * 60 * 60 * 1000;
+
+  if (ageMs <= twoWeeksMs) {
+    return "active";
+  }
+
+  if (ageMs <= threeMonthsMs) {
+    return "inactive";
+  }
+
+  return "offline";
+}
+
 function getSuggestedTags(source: SourceInbox) {
   if (source === "quotes") {
     return ["quote follow-up", "prospect"];
@@ -127,17 +220,21 @@ async function findOrCreateContact(
   source: SourceInbox,
   sender: SenderDetails,
   receivedAt: string | null,
-) {
+): Promise<ContactSyncResult> {
   if (!sender.email || shouldSkipContactCreation(sender.email)) {
     return {
       id: null,
+      companyId: null,
       created: false,
     };
   }
 
+  const companyId = await ensureCompanyForSender(supabase, sender, receivedAt);
+  const now = new Date().toISOString();
+
   const { data: existingContacts, error: existingError } = await supabase
     .from("contacts")
-    .select("id")
+    .select("id, company_id")
     .ilike("email", sender.email)
     .limit(1);
 
@@ -148,20 +245,31 @@ async function findOrCreateContact(
   const existingContact = existingContacts?.[0];
 
   if (existingContact?.id) {
+    const updatePayload: Record<string, string | null> = {
+      last_contacted_at: receivedAt,
+      status: "active",
+      updated_at: now,
+    };
+
+    if (!existingContact.company_id && companyId) {
+      updatePayload.company_id = companyId;
+    }
+
     const { error: updateError } = await supabase
       .from("contacts")
-      .update({
-        last_contacted_at: receivedAt,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", existingContact.id);
 
     if (updateError) {
       throw new Error(updateError.message);
     }
 
+    await applySourceTags(supabase, source, existingContact.id as string);
+    await setLifecycleTag(supabase, existingContact.id as string, "active");
+
     return {
       id: existingContact.id as string,
+      companyId: (existingContact.company_id as string | null) ?? companyId,
       created: false,
     };
   }
@@ -174,11 +282,12 @@ async function findOrCreateContact(
       first_name: firstName,
       last_name: lastName,
       email: sender.email,
+      company_id: companyId,
       source_inbox: source,
       mailing_status: "unknown",
       last_contacted_at: receivedAt,
       status: "active",
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     })
     .select("id")
     .single();
@@ -187,8 +296,12 @@ async function findOrCreateContact(
     throw new Error(error?.message ?? "Could not create contact from inbox sender.");
   }
 
+  await applySourceTags(supabase, source, data.id as string);
+  await setLifecycleTag(supabase, data.id as string, "active");
+
   return {
     id: data.id as string,
+    companyId,
     created: true,
   };
 }
@@ -204,7 +317,7 @@ async function syncMessage(
 
   const { data: existingEmails, error: existingError } = await supabase
     .from("inbound_emails")
-    .select("id, contact_id")
+    .select("id, contact_id, company_id")
     .eq("source_inbox", source)
     .eq("graph_message_id", message.id)
     .limit(1);
@@ -229,6 +342,7 @@ async function syncMessage(
     thread_subject: message.subject ?? null,
     received_at: receivedAt,
     contact_id: existingEmail?.contact_id ?? contact.id,
+    company_id: existingEmail?.company_id ?? contact.companyId,
     suggested_tags: getSuggestedTags(source),
     to_recipients: getRecipientEmails(message.toRecipients),
     cc_recipients: getRecipientEmails(message.ccRecipients),
@@ -354,6 +468,34 @@ async function syncInbox(source: SourceInbox): Promise<SyncResult> {
   }
 }
 
+async function refreshContactLifecycleStatuses(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id, last_contacted_at");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  for (const contact of data ?? []) {
+    const status = getLifecycleStatus(contact.last_contacted_at);
+
+    const { error: updateError } = await supabase
+      .from("contacts")
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", contact.id);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    await setLifecycleTag(supabase, contact.id as string, status);
+  }
+}
+
 export async function syncAllInboxes() {
   const results: SyncResult[] = [];
 
@@ -361,5 +503,188 @@ export async function syncAllInboxes() {
     results.push(await syncInbox(inbox.source));
   }
 
+  const supabase = createSupabaseAdminClient();
+  await refreshContactLifecycleStatuses(supabase);
+
   return results;
+}
+
+async function ensureTag(supabase: SupabaseClient, name: string, color: string) {
+  const { data, error } = await supabase
+    .from("tags")
+    .upsert(
+      {
+        name,
+        color,
+      },
+      {
+        onConflict: "name",
+      },
+    )
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    throw new Error(error?.message ?? `Could not create/find tag: ${name}`);
+  }
+
+  return data.id as string;
+}
+
+async function addTagToContact(
+  supabase: SupabaseClient,
+  contactId: string | null,
+  name: string,
+  color: string,
+) {
+  if (!contactId) {
+    return;
+  }
+
+  const tagId = await ensureTag(supabase, name, color);
+
+  const { error } = await supabase
+    .from("contact_tags")
+    .upsert(
+      {
+        contact_id: contactId,
+        tag_id: tagId,
+      },
+      {
+        onConflict: "contact_id,tag_id",
+      },
+    );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function setLifecycleTag(
+  supabase: SupabaseClient,
+  contactId: string | null,
+  lifecycleStatus: LifecycleStatus,
+) {
+  if (!contactId) {
+    return;
+  }
+
+  const tagEntries = await Promise.all([
+    ensureTag(supabase, "active", "#01979d"),
+    ensureTag(supabase, "inactive", "#f7a823"),
+    ensureTag(supabase, "offline", "#6b7280"),
+  ]);
+
+  const selectedTagId = tagEntries[lifecycleTags.indexOf(lifecycleStatus)];
+
+  const { error: deleteError } = await supabase
+    .from("contact_tags")
+    .delete()
+    .eq("contact_id", contactId)
+    .in("tag_id", tagEntries);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  const { error: upsertError } = await supabase
+    .from("contact_tags")
+    .upsert(
+      {
+        contact_id: contactId,
+        tag_id: selectedTagId,
+      },
+      {
+        onConflict: "contact_id,tag_id",
+      },
+    );
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+}
+
+async function applySourceTags(
+  supabase: SupabaseClient,
+  source: SourceInbox,
+  contactId: string | null,
+) {
+  if (!contactId) {
+    return;
+  }
+
+  if (source === "projects") {
+    await addTagToContact(supabase, contactId, "client", "#01979d");
+  }
+
+  if (source === "quotes") {
+    await addTagToContact(supabase, contactId, "quote follow-up", "#e94e1b");
+    await addTagToContact(supabase, contactId, "prospect", "#f7a823");
+  }
+
+  if (source === "enquiries") {
+    await addTagToContact(supabase, contactId, "prospect", "#f7a823");
+  }
+}
+
+async function ensureCompanyForSender(
+  supabase: SupabaseClient,
+  sender: SenderDetails,
+  receivedAt: string | null,
+) {
+  const domain = getEmailDomain(sender.email);
+
+  if (!domain) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+
+  const { data: existingCompanies, error: existingError } = await supabase
+    .from("companies")
+    .select("id")
+    .ilike("domain", domain)
+    .limit(1);
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const existingCompany = existingCompanies?.[0];
+
+  if (existingCompany?.id) {
+    const { error: updateError } = await supabase
+      .from("companies")
+      .update({
+        last_contacted_at: receivedAt,
+        updated_at: now,
+      })
+      .eq("id", existingCompany.id);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    return existingCompany.id as string;
+  }
+
+  const { data, error } = await supabase
+    .from("companies")
+    .insert({
+      name: companyNameFromDomain(domain),
+      domain,
+      website: `https://${domain}`,
+      status: "active",
+      auto_created: true,
+      last_contacted_at: receivedAt,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    throw new Error(error?.message ?? `Could not create company for ${domain}`);
+  }
+
+  return data.id as string;
 }

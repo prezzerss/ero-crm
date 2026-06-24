@@ -28,7 +28,11 @@ type ContactRecord = {
 };
 
 type InboxItemRecord = {
+  conversation_id?: string | null;
+  from_email?: string | null;
+  from_name?: string | null;
   id: string;
+  snippet?: string | null;
   subject?: string | null;
   source_inbox?: string | null;
   status?: string | null;
@@ -53,6 +57,15 @@ type ContactPageProps = {
   params: Promise<{
     id: string;
   }>;
+};
+
+type InboxThreadGroup = {
+  count: number;
+  href: string | null;
+  items: InboxItemRecord[];
+  key: string;
+  label: string;
+  latest?: string | null;
 };
 
 function getCompany(contact: ContactRecord) {
@@ -139,6 +152,62 @@ function getThreadLabel(item: InboxItemRecord) {
   return item.source_inbox === "projects" ? "No job number" : "-";
 }
 
+function getThreadKey(item: InboxItemRecord) {
+  return item.conversation_id || item.job_number || item.thread_subject || item.subject || item.id;
+}
+
+function getThreadHref(item: InboxItemRecord) {
+  if (!item.source_inbox) {
+    return null;
+  }
+
+  return `/inbox/${item.source_inbox}/thread/${encodeURIComponent(getThreadKey(item))}`;
+}
+
+function buildMailtoHref(email: string, name: string) {
+  const subject = `Following up from Easy Read Online`;
+  const body = `Hi ${name.split(" ")[0] || ""},`;
+
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function buildInboxThreadGroups(items: InboxItemRecord[]) {
+  const groups = items.reduce((threadGroups, item) => {
+    const key = getThreadKey(item);
+    const label = getThreadLabel(item) === "-" ? item.subject || "Inbox thread" : getThreadLabel(item);
+    const existingGroup = threadGroups.get(key);
+    const group: InboxThreadGroup = existingGroup ?? {
+      count: 0,
+      href: getThreadHref(item),
+      items: [],
+      key,
+      label,
+      latest: item.received_at,
+    };
+
+    group.count += 1;
+    group.items.push(item);
+
+    if (item.received_at && (!group.latest || new Date(item.received_at) > new Date(group.latest))) {
+      group.latest = item.received_at;
+      group.href = getThreadHref(item);
+    }
+
+    threadGroups.set(key, group);
+
+    return threadGroups;
+  }, new Map<string, InboxThreadGroup>());
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      items: group.items.sort(
+        (a, b) => new Date(b.received_at ?? 0).getTime() - new Date(a.received_at ?? 0).getTime(),
+      ),
+    }))
+    .sort((a, b) => new Date(b.latest ?? 0).getTime() - new Date(a.latest ?? 0).getTime());
+}
+
 export default async function ContactDetailPage({ params }: ContactPageProps) {
   const { id } = await params;
 
@@ -167,7 +236,7 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
       .select("*")
       .eq("contact_id", id)
       .order("received_at", { ascending: false })
-      .limit(8),
+      .limit(80),
     supabase
       .from("inbound_emails")
       .select("*")
@@ -190,9 +259,11 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
     .map((row) => getMailingList(row))
     .filter((list): list is MailingListRecord => Boolean(list));
   const inbox = (inboxItems ?? []) as InboxItemRecord[];
+  const inboxThreadGroups = buildInboxThreadGroups(inbox);
   const linkableInboxItems = ((allInboxItems ?? []) as InboxItemRecord[]).filter(
     (item) => item.contact_id !== id,
   );
+  const contactName = getFullName(typedContact);
 
   return (
     <div className="grid gap-8">
@@ -203,7 +274,7 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
               Back to contacts
             </Link>
 
-            <h1 className="crm-page-title mt-4">{getFullName(typedContact)}</h1>
+            <h1 className="crm-page-title mt-4">{contactName}</h1>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="crm-status-pill">{formatStatus(typedContact.status)}</span>
               <span className="crm-status-pill crm-status-pill-yellow">
@@ -212,9 +283,17 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
             </div>
           </div>
 
-          <Link className="crm-button crm-button-primary" href={`/contacts/${id}/edit`}>
-            Edit contact
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            {typedContact.email && (
+              <a className="crm-button" href={buildMailtoHref(typedContact.email, contactName)}>
+                Email contact
+              </a>
+            )}
+
+            <Link className="crm-button crm-button-primary" href={`/contacts/${id}/edit`}>
+              Edit contact
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -351,41 +430,48 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
               </button>
             </form>
           </div>
-          <div className="overflow-x-auto">
-            <table className="crm-table">
-              <thead>
-                <tr>
-                  <th>Message</th>
-                  <th>Inbox</th>
-                  <th>Job / thread</th>
-                  <th>Received</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inbox.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <Link className="font-bold underline" href={`/inbox/message/${item.id}`}>
-                        {item.subject || "No subject"}
-                      </Link>
-                    </td>
-                    <td>{getSourceLabel(item.source_inbox)}</td>
-                    <td>{getThreadLabel(item)}</td>
-                    <td>{formatDate(item.received_at)}</td>
-                    <td>
-                      <span className="crm-status-pill">{formatStatus(item.status, "New")}</span>
-                    </td>
-                  </tr>
-                ))}
+          <div className="grid gap-4 p-5">
+            {inboxThreadGroups.map((group) => (
+              <article className="crm-thread-group" key={group.key}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-black">{group.label}</h3>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="crm-status-pill">{group.count} messages</span>
+                      <span className="crm-status-pill crm-status-pill-yellow">
+                        Latest {formatDate(group.latest)}
+                      </span>
+                    </div>
+                  </div>
 
-                {!inbox.length && (
-                  <tr>
-                    <td colSpan={5}>No linked inbox items.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  {group.href && (
+                    <Link className="crm-button" href={group.href}>
+                      View thread
+                    </Link>
+                  )}
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  {group.items.map((item) => (
+                    <div className="crm-thread-preview" key={item.id}>
+                      <div className="min-w-0">
+                        <Link className="font-bold underline" href={`/inbox/message/${item.id}`}>
+                          {item.subject || "No subject"}
+                        </Link>
+                        <p className="crm-muted mt-1 text-sm">
+                          {getSourceLabel(item.source_inbox)} / {formatDate(item.received_at)}
+                        </p>
+                      </div>
+                      <span className="crm-status-pill">{formatStatus(item.status, "New")}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+
+            {!inboxThreadGroups.length && (
+              <p className="crm-empty">No linked inbox items.</p>
+            )}
           </div>
         </section>
       </section>

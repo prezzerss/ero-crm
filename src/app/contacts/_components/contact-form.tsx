@@ -41,6 +41,13 @@ const mailingStatusOptions = [
   { value: "do_not_contact", label: "Do not contact" },
 ];
 
+const statusOptions = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "offline", label: "Offline" },
+  { value: "archived", label: "Archived" },
+];
+
 function normaliseSource(contact?: ContactFormContact | null) {
   const source = contact?.source_inbox ?? contact?.source ?? contact?.source_email ?? "manual";
 
@@ -65,6 +72,12 @@ function normaliseMailingStatus(contact?: ContactFormContact | null) {
   return mailingStatusOptions.some((option) => option.value === mailingStatus)
     ? mailingStatus
     : "unknown";
+}
+
+function normaliseStatus(contact?: ContactFormContact | null) {
+  const status = contact?.status?.toLowerCase() ?? "active";
+
+  return statusOptions.some((option) => option.value === status) ? status : "active";
 }
 
 export function ContactForm({
@@ -139,12 +152,13 @@ export function ContactForm({
 
         <label className="grid gap-2 font-bold">
           <span>Status</span>
-          <input
-            className="crm-input"
-            defaultValue={contact?.status ?? "Active"}
-            name="status"
-            placeholder="Active"
-          />
+          <select className="crm-input" defaultValue={normaliseStatus(contact)} name="status">
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="grid gap-2 font-bold">
@@ -174,21 +188,30 @@ export function ContactForm({
         </label>
       </div>
 
-      <label className="grid gap-2 font-bold">
-        <span>Tags</span>
-        <select
-          className="crm-input min-h-36"
-          defaultValue={selectedTagIds}
-          multiple
-          name="tag_ids"
-        >
-          {tags.map((tag) => (
-            <option key={tag.id} value={tag.id}>
-              {tag.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <fieldset className="grid gap-3">
+        <legend className="font-bold">Tags</legend>
+
+        {tags.length ? (
+          <div className="flex flex-wrap gap-2">
+            {tags.map((tag) => (
+              <label
+                className="inline-flex cursor-pointer items-center gap-2 rounded-[var(--radius)] border border-gray-200 bg-white px-3 py-2 font-bold"
+                key={tag.id}
+              >
+                <input
+                  defaultChecked={selectedTagIds.includes(tag.id)}
+                  name="tag_ids"
+                  type="checkbox"
+                  value={tag.id}
+                />
+                <span>{tag.name}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="crm-muted">No tags have been added yet.</p>
+        )}
+      </fieldset>
 
       <label className="grid gap-2 font-bold">
         <span>Notes</span>

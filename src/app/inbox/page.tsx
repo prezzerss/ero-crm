@@ -5,6 +5,7 @@ type InboxPageProps = {
     q?: string;
     source?: string;
     status?: string;
+    page?: string;
   }>;
 };
 

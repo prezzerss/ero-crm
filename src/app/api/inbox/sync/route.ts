@@ -4,18 +4,22 @@ import { syncAllInboxes } from "@/lib/inbox-sync";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function getExpectedSecret() {
-  return process.env.CRON_SECRET ?? process.env.INBOX_SYNC_SECRET;
+function getExpectedSecrets() {
+  return [process.env.CRON_SECRET, process.env.INBOX_SYNC_SECRET].filter(
+    (secret): secret is string => Boolean(secret),
+  );
 }
 
 function isAuthorised(request: NextRequest) {
-  const expectedSecret = getExpectedSecret();
+  const expectedSecrets = getExpectedSecrets();
 
-  if (!expectedSecret) {
+  if (!expectedSecrets.length) {
     throw new Error("Missing CRON_SECRET or INBOX_SYNC_SECRET.");
   }
 
-  return request.headers.get("authorization") === `Bearer ${expectedSecret}`;
+  const authorisationHeader = request.headers.get("authorization");
+
+  return expectedSecrets.some((secret) => authorisationHeader === `Bearer ${secret}`);
 }
 
 async function handleSync(request: NextRequest) {
