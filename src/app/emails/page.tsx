@@ -1,9 +1,5 @@
-export default function EmailsPage() {
-    return (
-        <div>
-            <h1 className="text-3l font-bold">
-                Emails
-            </h1>
-        </div>
-    );
+import { redirect } from "next/navigation";
+
+export default function EmailsRedirectPage() {
+  redirect("/inbox");
 }

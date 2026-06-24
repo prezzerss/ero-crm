@@ -1,0 +1,21 @@
+-- Auth setup notes for ERO CRM
+--
+-- 1. Enable Azure (Microsoft) as an OAuth provider in Supabase Auth.
+-- 2. In Supabase Auth > Providers > Azure, set Azure Tenant URL to:
+--    https://login.microsoftonline.com/<tenant-id>
+--    Use the Tenant ID from Microsoft Entra. This is needed when the Azure
+--    app registration is set to "Accounts in this organisational directory only";
+--    otherwise Microsoft rejects Supabase's common tenant flow with AADSTS50194.
+-- 3. In the Azure app registration, set the Web Redirect URI to the Supabase
+--    Auth callback URL:
+--    https://<project-ref>.supabase.co/auth/v1/callback
+-- 4. Add this app's callback URL to Supabase Auth redirect URLs:
+--    http://localhost:3002/auth/callback
+--    and your deployed production URL when ready.
+-- 5. In Azure/Microsoft Entra, prefer an organisation-only app registration
+--    for Easy Read Online. The app also checks email addresses end in:
+--    @easy-read-online.co.uk
+--
+-- Data tables still need the schema files run separately:
+-- - supabase/contact-crm-schema.sql
+-- - supabase/email-intake-schema.sql

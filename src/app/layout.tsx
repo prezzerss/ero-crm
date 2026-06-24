@@ -1,50 +1,67 @@
 import "./globals.css";
+import Image from "next/image";
 import Link from "next/link";
+import { headers } from "next/headers";
 
 export const metadata = {
   title: "ERO CRM",
   description: "Easy Read Online CRM",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") ?? "";
+  const isAuthRoute = pathname.startsWith("/sign-in") || pathname.startsWith("/auth/");
+  const navItems = [
+    { href: "/", label: "Dashboard" },
+    { href: "/companies", label: "Companies" },
+    { href: "/contacts", label: "Contacts" },
+    { href: "/inbox", label: "Inbox" },
+    { href: "/mailing-lists", label: "Mailing lists" },
+    { href: "/profile", label: "Profile" },
+  ];
+
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen">
-          <aside className="w-64 bg-white border-r-2 border-[#303030] p-6">
-            <div className="mb-8">
-              <p className="text-sm font-bold text-[var(--brand-teal)]">
-                Easy Read Online
-              </p>
-              <h1 className="text-3xl font-black tracking-tight">
-                CRM
-              </h1>
-            </div>
+        {isAuthRoute ? (
+          children
+        ) : (
+          <div className="crm-shell">
+            <aside className="crm-sidebar">
+              <div className="mb-8">
+                <div className="crm-logo-card">
+                  <Image
+                    alt="Easy Read Online logo"
+                    className="crm-logo"
+                    height={963}
+                    priority
+                    src="/er_logo.jpg"
+                    style={{ height: "auto" }}
+                    width={669}
+                  />
+                </div>
+              </div>
 
-            <nav className="space-y-3">
-              <Link className="block rounded-xl px-3 py-2 font-bold hover:bg-gray-100" href="/">
-                Dashboard
-              </Link>
-              <Link className="block rounded-xl px-3 py-2 font-bold hover:bg-gray-100" href="/companies">
-                Companies
-              </Link>
-              <Link className="block rounded-xl px-3 py-2 font-bold hover:bg-gray-100" href="/contacts">
-                Contacts
-              </Link>
-              <Link className="block rounded-xl px-3 py-2 font-bold hover:bg-gray-100" href="/emails">
-                Emails
-              </Link>
-            </nav>
-          </aside>
+              <nav className="space-y-2">
+                {navItems.map((item) => (
+                  <Link className="crm-nav-link" href={item.href} key={item.href}>
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
 
-          <main className="flex-1 p-8">
-            {children}
-          </main>
-        </div>
+            </aside>
+
+            <main className="crm-main">
+              {children}
+            </main>
+          </div>
+        )}
       </body>
     </html>
   );
