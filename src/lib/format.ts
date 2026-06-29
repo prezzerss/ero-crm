@@ -5,7 +5,7 @@ const statusLabels: Record<string, string> = {
   follow_up: "Follow up",
   ignored: "Ignored",
   linked: "Linked",
-  new: "New",
+  new: "Needs review",
   paused: "Paused",
   reviewing: "Reviewing",
   subscribed: "Subscribed",

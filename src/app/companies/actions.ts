@@ -16,13 +16,13 @@ function cleanString(value: FormDataEntryValue | null) {
 
 function buildCompanyPayload(formData: FormData, includeBillingColumns = true) {
   const payload: Record<string, string | null> = {
-  name: cleanString(formData.get("name")),
-  sector: cleanString(formData.get("sector")),
-  status: cleanString(formData.get("status")) ?? "active",
-  website: cleanString(formData.get("website")),
-  domain: cleanString(formData.get("domain")),
-  notes: cleanString(formData.get("notes")),
-};
+    name: cleanString(formData.get("name")),
+    sector: cleanString(formData.get("sector")),
+    status: cleanString(formData.get("status")) ?? "active",
+    website: cleanString(formData.get("website")),
+    domain: cleanString(formData.get("domain")),
+    notes: cleanString(formData.get("notes")),
+  };
 
   if (includeBillingColumns) {
     payload.billing_contact_name = cleanString(formData.get("billing_contact_name"));
@@ -76,7 +76,7 @@ export async function createCompany(formData: FormData) {
   }
 
   if (error || !data?.id) {
-    throw new Error(error?.message ?? "Could not create company.");
+    throw new Error(error?.message ?? "Could not create client.");
   }
 
   revalidatePath("/");

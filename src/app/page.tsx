@@ -78,7 +78,7 @@ export default async function DashboardPage() {
                 View contacts
               </Link>
               <Link className="crm-button" href="/companies">
-                View companies
+                View clients
               </Link>
               <Link className="crm-button" href="/inbox">
                 View inbox
@@ -108,7 +108,7 @@ export default async function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="crm-card crm-kpi p-5">
-          <p className="crm-muted font-bold">Companies</p>
+          <p className="crm-muted font-bold">Clients</p>
           <p className="mt-3 text-4xl font-black">{companyCount ?? 0}</p>
         </div>
 
@@ -137,7 +137,7 @@ export default async function DashboardPage() {
         <div className="crm-card overflow-hidden">
           <div className="flex items-center justify-between gap-4 border-b border-[var(--border-soft)] p-5">
             <div>
-              <h2 className="crm-section-title">Recent companies</h2>
+              <h2 className="crm-section-title">Recent clients</h2>
             </div>
             <Link className="crm-button" href="/companies">
               View all
@@ -148,7 +148,7 @@ export default async function DashboardPage() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Sector</th>
+                <th>Client type</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -169,7 +169,7 @@ export default async function DashboardPage() {
 
               {!companies.length && (
                 <tr>
-                  <td colSpan={3}>No companies yet.</td>
+                  <td colSpan={3}>No clients yet.</td>
                 </tr>
               )}
             </tbody>
@@ -205,7 +205,7 @@ export default async function DashboardPage() {
                   <td>{getSourceLabel(email.source_inbox)}</td>
                   <td>
                     <span className="crm-status-pill crm-status-pill-yellow">
-                      {formatStatus(email.status, "New")}
+                      {formatStatus(email.status, "Needs review")}
                     </span>
                   </td>
                 </tr>

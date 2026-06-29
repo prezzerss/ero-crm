@@ -4,7 +4,6 @@ import { supabase } from "@/lib/supabase";
 import { formatStatus } from "@/lib/format";
 import { linkInboxItemToContact } from "@/app/emails/actions";
 import { updateContactNotes } from "../actions";
-import { getContactTagRows, getTagsFromRows } from "../data";
 
 type CompanyRecord = {
   id?: string | null;
@@ -229,7 +228,7 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
 
   const typedContact = contact as ContactRecord;
   const company = getCompany(typedContact);
-  const [{ data: inboxItems }, { data: allInboxItems }, { data: listRows }, tagRows] =
+  const [{ data: inboxItems }, { data: allInboxItems }, { data: listRows }] =
     await Promise.all([
     supabase
       .from("inbound_emails")
@@ -252,9 +251,7 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
         )
       `)
       .eq("contact_id", id),
-    getContactTagRows(id),
   ]);
-  const tags = getTagsFromRows(tagRows);
   const mailingLists = ((listRows ?? []) as MailingListMemberRecord[])
     .map((row) => getMailingList(row))
     .filter((list): list is MailingListRecord => Boolean(list));
@@ -299,14 +296,14 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
 
       <section className="grid gap-4 md:grid-cols-4">
         <div className="crm-card crm-kpi p-5">
-          <p className="crm-muted font-bold">Company</p>
+          <p className="crm-muted font-bold">Client</p>
           <p className="mt-2 text-xl font-black">
             {company?.id ? (
               <Link href={`/companies/${company.id}`} className="underline">
                 {company.name}
               </Link>
             ) : (
-              "No company"
+              "No client"
             )}
           </p>
         </div>
@@ -355,21 +352,7 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
         </div>
 
         <div className="crm-card p-6">
-          <h2 className="crm-section-title">Tags and notes</h2>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <span
-                className="rounded-full px-3 py-1 text-sm font-bold"
-                key={tag.id}
-                style={{ background: tag.color ?? "#eef2f4" }}
-              >
-                {tag.name}
-              </span>
-            ))}
-
-            {!tags.length && <span className="crm-muted font-bold">No tags yet.</span>}
-          </div>
-
+          <h2 className="crm-section-title">Notes</h2>
           <form action={updateContactNotes.bind(null, id)} className="mt-5 grid gap-3">
             <label className="grid gap-2 font-bold">
               <span>Notes</span>
@@ -462,7 +445,7 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
                           {getSourceLabel(item.source_inbox)} / {formatDate(item.received_at)}
                         </p>
                       </div>
-                      <span className="crm-status-pill">{formatStatus(item.status, "New")}</span>
+                      <span className="crm-status-pill">{formatStatus(item.status, "Needs review")}</span>
                     </div>
                   ))}
                 </div>

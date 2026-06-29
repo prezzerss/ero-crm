@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps } from "react";
-import type { CompanyOption, TagOption } from "../data";
+import type { CompanyOption } from "../data";
 
 type ContactFormContact = {
   first_name?: string | null;
@@ -23,8 +23,6 @@ type ContactFormProps = {
   contact?: ContactFormContact | null;
   defaultCompanyId?: string;
   mode: "create" | "edit";
-  selectedTagIds?: string[];
-  tags: TagOption[];
 };
 
 const sourceInboxOptions = [
@@ -87,8 +85,6 @@ export function ContactForm({
   contact,
   defaultCompanyId,
   mode,
-  selectedTagIds = [],
-  tags,
 }: ContactFormProps) {
   return (
     <form action={action} className="crm-card grid gap-6 p-6">
@@ -135,13 +131,13 @@ export function ContactForm({
         </label>
 
         <label className="grid gap-2 font-bold">
-          <span>Company</span>
+          <span>Client</span>
           <select
             className="crm-input"
             defaultValue={contact?.company_id ?? defaultCompanyId ?? ""}
             name="company_id"
           >
-            <option value="">No company</option>
+            <option value="">No client</option>
             {companies.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.name}
@@ -187,31 +183,6 @@ export function ContactForm({
           </select>
         </label>
       </div>
-
-      <fieldset className="grid gap-3">
-        <legend className="font-bold">Tags</legend>
-
-        {tags.length ? (
-          <div className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <label
-                className="inline-flex cursor-pointer items-center gap-2 rounded-[var(--radius)] border border-gray-200 bg-white px-3 py-2 font-bold"
-                key={tag.id}
-              >
-                <input
-                  defaultChecked={selectedTagIds.includes(tag.id)}
-                  name="tag_ids"
-                  type="checkbox"
-                  value={tag.id}
-                />
-                <span>{tag.name}</span>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <p className="crm-muted">No tags have been added yet.</p>
-        )}
-      </fieldset>
 
       <label className="grid gap-2 font-bold">
         <span>Notes</span>

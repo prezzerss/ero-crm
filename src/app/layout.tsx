@@ -18,10 +18,11 @@ export default async function RootLayout({
   const isAuthRoute = pathname.startsWith("/sign-in") || pathname.startsWith("/auth/");
   const navItems = [
     { href: "/", label: "Dashboard" },
-    { href: "/companies", label: "Companies" },
+    { href: "/companies", label: "Clients" },
     { href: "/contacts", label: "Contacts" },
     { href: "/inbox", label: "Inbox" },
     { href: "/mailing-lists", label: "Mailing lists" },
+    { href: "/reporting", label: "Reporting" },
     { href: "/profile", label: "Profile" },
   ];
 

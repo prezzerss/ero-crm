@@ -232,7 +232,7 @@ export default async function InboxMessagePage({ params }: EmailDetailPageProps)
           <div className="flex flex-wrap gap-2">
             <span className="crm-status-pill">{getSourceLabel(typedEmail.source_inbox)}</span>
             <span className="crm-status-pill crm-status-pill-yellow">
-              {formatStatus(typedEmail.status, "New")}
+              {formatStatus(typedEmail.status, "Needs review")}
             </span>
           </div>
 
@@ -263,7 +263,7 @@ export default async function InboxMessagePage({ params }: EmailDetailPageProps)
                 </Link>
               </DetailRow>
 
-              <DetailRow label="Status">{formatStatus(typedEmail.status, "New")}</DetailRow>
+              <DetailRow label="Status">{formatStatus(typedEmail.status, "Needs review")}</DetailRow>
 
               <DetailRow label="Linked contact">
                 {contact ? (
@@ -275,13 +275,13 @@ export default async function InboxMessagePage({ params }: EmailDetailPageProps)
                 )}
               </DetailRow>
 
-              <DetailRow label="Linked company">
+              <DetailRow label="Linked client">
                 {company ? (
                   <Link href={`/companies/${company.id}`} className="font-bold underline">
                     {company.name}
                   </Link>
                 ) : (
-                  <span className="crm-muted">No company linked</span>
+                  <span className="crm-muted">No client linked</span>
                 )}
               </DetailRow>
 

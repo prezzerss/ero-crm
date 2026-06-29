@@ -4,8 +4,10 @@ type InboxPageProps = {
   searchParams: Promise<{
     q?: string;
     source?: string;
-    status?: string;
     page?: string;
+    clientType?: string;
+    sort?: string;
+    view?: string;
   }>;
 };
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps } from "react";
+import { clientTypeOptions } from "@/lib/client-types";
 
 type CompanyFormProps = {
   action: ComponentProps<"form">["action"];
@@ -19,12 +20,29 @@ type CompanyFormProps = {
   mode: "create" | "edit";
 };
 
-export function CompanyForm({ action, cancelHref, company, mode }: CompanyFormProps) {
+const statusOptions = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "offline", label: "Offline" },
+];
+
+function normaliseStatus(company: CompanyFormProps["company"]) {
+  const status = company?.status?.toLowerCase() ?? "active";
+
+  return statusOptions.some((option) => option.value === status) ? status : "active";
+}
+
+export function CompanyForm({
+  action,
+  cancelHref,
+  company,
+  mode,
+}: CompanyFormProps) {
   return (
     <form action={action} className="crm-card grid gap-6 p-6">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-2 font-bold">
-          <span>Company name</span>
+          <span>Client name</span>
           <input
             className="crm-input"
             defaultValue={company?.name ?? ""}
@@ -35,29 +53,37 @@ export function CompanyForm({ action, cancelHref, company, mode }: CompanyFormPr
         </label>
 
         <label className="grid gap-2 font-bold">
-          <span>Sector</span>
-          <input
-            className="crm-input"
-            defaultValue={company?.sector ?? ""}
-            name="sector"
-            placeholder="Council, charity, health..."
-          />
+          <span>Client type</span>
+          <select className="crm-input" defaultValue={company?.sector ?? ""} name="sector">
+            <option value="">Choose client type</option>
+            {clientTypeOptions.map((clientType) => (
+              <option key={clientType} value={clientType}>
+                {clientType}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="grid gap-2 font-bold">
           <span>Status</span>
-          <input className="crm-input" defaultValue={company?.status ?? "Active"} name="status" />
+          <select className="crm-input" defaultValue={normaliseStatus(company)} name="status">
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="grid gap-2 font-bold">
-  <span>Email domain</span>
-  <input
-    className="crm-input"
-    defaultValue={company?.domain ?? ""}
-    name="domain"
-    placeholder="example.org.uk"
-  />
-</label>
+          <span>Email domain</span>
+          <input
+            className="crm-input"
+            defaultValue={company?.domain ?? ""}
+            name="domain"
+            placeholder="example.org.uk"
+          />
+        </label>
 
         <label className="grid gap-2 font-bold">
           <span>Website</span>
@@ -113,7 +139,7 @@ export function CompanyForm({ action, cancelHref, company, mode }: CompanyFormPr
 
       <div className="flex flex-wrap gap-3">
         <button className="crm-button crm-button-primary" type="submit">
-          {mode === "create" ? "Create company" : "Save changes"}
+          {mode === "create" ? "Create client" : "Save changes"}
         </button>
 
         <Link className="crm-button" href={cancelHref}>

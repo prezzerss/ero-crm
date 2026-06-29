@@ -26,6 +26,72 @@ function isMissingMailingListTableError(errorMessage: string) {
   );
 }
 
+async function getContactIdsForTag(tagId: string) {
+  const [{ data: contactTagRows }, { data: companyTagRows }] = await Promise.all([
+    supabase
+      .from("contact_tags")
+      .select("contact_id")
+      .eq("tag_id", tagId),
+    supabase
+      .from("company_tags")
+      .select("company_id")
+      .eq("tag_id", tagId),
+  ]);
+  const contactIds = new Set(
+    (contactTagRows ?? [])
+      .map((row) => row.contact_id as string | null)
+      .filter((contactId): contactId is string => Boolean(contactId)),
+  );
+  const companyIds = (companyTagRows ?? [])
+    .map((row) => row.company_id as string | null)
+    .filter((companyId): companyId is string => Boolean(companyId));
+
+  if (companyIds.length) {
+    const { data: companyContacts } = await supabase
+      .from("contacts")
+      .select("id")
+      .in("company_id", companyIds);
+
+    (companyContacts ?? []).forEach((contact) => {
+      if (contact.id) {
+        contactIds.add(contact.id as string);
+      }
+    });
+  }
+
+  return Array.from(contactIds);
+}
+
+async function addTaggedContactsToMailingList(mailingListId: string, tagId: string) {
+  const contactIds = await getContactIdsForTag(tagId);
+
+  if (!contactIds.length) {
+    return;
+  }
+
+  const { error } = await supabase.from("mailing_list_contacts").upsert(
+    contactIds.map((contactId) => ({
+      mailing_list_id: mailingListId,
+      contact_id: contactId,
+    })),
+    {
+      onConflict: "mailing_list_id,contact_id",
+    },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await supabase
+    .from("contacts")
+    .update({
+      mailing_status: "subscribed",
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", contactIds);
+}
+
 export async function createMailingList(formData: FormData) {
   const { data, error } = await supabase
     .from("mailing_lists")
@@ -46,6 +112,12 @@ export async function createMailingList(formData: FormData) {
     }
 
     throw new Error(error?.message ?? "Could not create mailing list.");
+  }
+
+  const tagId = cleanString(formData.get("tag_id"));
+
+  if (tagId) {
+    await addTaggedContactsToMailingList(data.id, tagId);
   }
 
   revalidatePath("/");

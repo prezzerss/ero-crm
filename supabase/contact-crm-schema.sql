@@ -46,6 +46,13 @@ create table if not exists contact_tags (
   primary key (contact_id, tag_id)
 );
 
+create table if not exists company_tags (
+  company_id uuid references companies(id) on delete cascade,
+  tag_id uuid references tags(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (company_id, tag_id)
+);
+
 create table if not exists mailing_lists (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -67,10 +74,27 @@ create table if not exists mailing_list_contacts (
 create index if not exists mailing_list_contacts_contact_id_idx
 on mailing_list_contacts (contact_id);
 
+create index if not exists company_tags_tag_id_idx
+on company_tags (tag_id);
+
+create index if not exists contact_tags_tag_id_idx
+on contact_tags (tag_id);
+
 insert into tags (name, color) values
 ('client', '#01979d'),
 ('prospect', '#f7a823'),
 ('quote follow-up', '#e94e1b'),
 ('mailing list', '#166534'),
-('do not contact', '#b00020')
+('do not contact', '#b00020'),
+('Council', '#dff3f4'),
+('Charity', '#fff3d8'),
+('Government', '#e6edf3'),
+('Arts and Culture', '#fde8df'),
+('NHS', '#dbeafe'),
+('Agency', '#e0e7ff'),
+('Housing Association', '#dcfce7'),
+('Private care', '#fce7f3'),
+('Private', '#f3f4f6'),
+('Public Bodies', '#fef3c7'),
+('International', '#ecfeff')
 on conflict (name) do nothing;

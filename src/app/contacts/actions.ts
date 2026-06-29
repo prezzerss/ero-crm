@@ -99,32 +99,6 @@ async function saveContactNotesIfPossible(contactId: string, formData: FormData)
   }
 }
 
-async function syncContactTags(contactId: string, formData: FormData) {
-  const tagIds = formData
-    .getAll("tag_ids")
-    .filter((tagId): tagId is string => typeof tagId === "string" && Boolean(tagId));
-
-  const { error: deleteError } = await supabase
-    .from("contact_tags")
-    .delete()
-    .eq("contact_id", contactId);
-
-  if (deleteError) {
-    return;
-  }
-
-  if (!tagIds.length) {
-    return;
-  }
-
-  await supabase.from("contact_tags").insert(
-    tagIds.map((tagId) => ({
-      contact_id: contactId,
-      tag_id: tagId,
-    })),
-  );
-}
-
 export async function createContact(formData: FormData) {
   let payload = buildContactPayload(formData);
   let { data, error } = await supabase
@@ -155,8 +129,6 @@ export async function createContact(formData: FormData) {
   if (!("notes" in payload)) {
     await saveContactNotesIfPossible(contactId, formData);
   }
-
-  await syncContactTags(contactId, formData);
 
   revalidatePath("/");
   revalidatePath("/contacts");
@@ -193,8 +165,6 @@ export async function updateContact(contactId: string, formData: FormData) {
   if (!("notes" in payload)) {
     await saveContactNotesIfPossible(contactId, formData);
   }
-
-  await syncContactTags(contactId, formData);
 
   const companyId = cleanString(formData.get("company_id"));
 

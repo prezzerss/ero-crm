@@ -151,14 +151,22 @@ export async function listRecentInboxMessages(
   let nextUrl: string | undefined = buildMessagesUrl(mailboxAddress, sinceIso);
 
   while (nextUrl && page < maxPages) {
+    console.log(`[microsoft-graph] Fetching: ${nextUrl}`);
+
     const pageResponse: GraphListResponse<GraphMessage> =
       await graphGet<GraphListResponse<GraphMessage>>(nextUrl, accessToken);
+
+    console.log(
+      `[microsoft-graph] Page ${page + 1}: retrieved ${pageResponse.value?.length ?? 0} messages`,
+    );
 
     messages.push(...(pageResponse.value ?? []));
 
     nextUrl = pageResponse["@odata.nextLink"];
     page += 1;
   }
+
+  console.log(`[microsoft-graph] Total retrieved: ${messages.length} messages`);
 
   return messages;
 }

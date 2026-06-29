@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { clientTypeOptions } from "@/lib/client-types";
 import { supabase } from "@/lib/supabase";
 import { formatStatus } from "@/lib/format";
 
@@ -6,6 +7,9 @@ type CompaniesPageProps = {
   searchParams: Promise<{
     q?: string;
     page?: string;
+    clientType?: string;
+    sort?: string;
+    status?: string;
   }>;
 };
 
@@ -25,6 +29,19 @@ type CompanyRecord = {
 
 const PAGE_SIZE = 25;
 
+const statusFilterOptions = [
+  { value: "all", label: "All statuses" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "offline", label: "Offline" },
+];
+
+const sortOptions = [
+  { value: "alpha_az", label: "Alphabetical A-Z" },
+  { value: "alpha_za", label: "Alphabetical Z-A" },
+  { value: "recent_contact", label: "Recently contacted" },
+];
+
 function getCurrentPage(page?: string) {
   const parsedPage = Number(page ?? "1");
 
@@ -39,11 +56,35 @@ function escapeSearchValue(value: string) {
   return value.replaceAll("%", "\\%").replaceAll("_", "\\_");
 }
 
-function buildPageHref(query: string, page: number) {
+function normaliseSort(sort?: string) {
+  return sortOptions.some((option) => option.value === sort) ? sort ?? "alpha_az" : "alpha_az";
+}
+
+function buildPageHref(
+  page: number,
+  values: {
+    selectedClientType: string;
+    query: string;
+    selectedSort: string;
+    selectedStatus: string;
+  },
+) {
   const params = new URLSearchParams();
 
-  if (query) {
-    params.set("q", query);
+  if (values.query) {
+    params.set("q", values.query);
+  }
+
+  if (values.selectedStatus !== "all") {
+    params.set("status", values.selectedStatus);
+  }
+
+  if (values.selectedClientType !== "all") {
+    params.set("clientType", values.selectedClientType);
+  }
+
+  if (values.selectedSort !== "alpha_az") {
+    params.set("sort", values.selectedSort);
   }
 
   if (page > 1) {
@@ -73,26 +114,19 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
-function normaliseWebsiteUrl(value?: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
-}
-
 export default async function CompaniesPage({ searchParams }: CompaniesPageProps) {
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
+  const selectedClientType = params.clientType ?? "all";
+  const selectedStatus = params.status ?? "all";
+  const selectedSort = normaliseSort(params.sort);
   const currentPage = getCurrentPage(params.page);
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
   let companiesQuery = supabase
     .from("companies")
-    .select("*", { count: "exact" })
-    .order("name")
-    .range(from, to);
+    .select("*", { count: "exact" });
 
   if (query) {
     const escapedQuery = escapeSearchValue(query);
@@ -107,11 +141,29 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
     );
   }
 
+  if (selectedStatus !== "all") {
+    companiesQuery = companiesQuery.ilike("status", selectedStatus);
+  }
+
+  if (selectedClientType !== "all") {
+    companiesQuery = companiesQuery.eq("sector", selectedClientType);
+  }
+
+  if (selectedSort === "alpha_za") {
+    companiesQuery = companiesQuery.order("name", { ascending: false });
+  } else if (selectedSort === "recent_contact") {
+    companiesQuery = companiesQuery.order("last_contacted_at", { ascending: false });
+  } else {
+    companiesQuery = companiesQuery.order("name");
+  }
+
+  companiesQuery = companiesQuery.range(from, to);
+
   const [
     { data: companies, error, count: totalCompanies },
     { count: linkedContactCount },
     { count: activeCompanyCount },
-    { count: autoCreatedCount },
+    { count: linkedEmailCount },
   ] = await Promise.all([
     companiesQuery,
     supabase
@@ -123,16 +175,16 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
       .select("*", { count: "exact", head: true })
       .ilike("status", "active"),
     supabase
-      .from("companies")
+      .from("inbound_emails")
       .select("*", { count: "exact", head: true })
-      .eq("auto_created", true),
+      .not("company_id", "is", null),
   ]);
 
   if (error) {
     return (
       <div>
-        <h1 className="crm-page-title">Companies</h1>
-        <p className="mt-4 text-red-600">Error loading companies.</p>
+        <h1 className="crm-page-title">Clients</h1>
+        <p className="mt-4 text-red-600">Error loading clients.</p>
       </div>
     );
   }
@@ -141,9 +193,20 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
   const matchingCount = totalCompanies ?? 0;
   const totalPages = Math.max(1, Math.ceil(matchingCount / PAGE_SIZE));
   const billingCount = rows.filter((company) => Boolean(company.billing_email || company.billing_address)).length;
+  const hasActiveFilters =
+    Boolean(query) ||
+    selectedStatus !== "all" ||
+    selectedClientType !== "all" ||
+    selectedSort !== "alpha_az";
+  const pageValues = {
+    selectedClientType,
+    query,
+    selectedSort,
+    selectedStatus,
+  };
   const companyCards = [
     {
-      title: query ? "Matching organisations" : "Organisations",
+      title: hasActiveFilters ? "Matching clients" : "Clients",
       count: matchingCount,
       className: "",
     },
@@ -158,8 +221,8 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
       className: "crm-kpi-yellow",
     },
     {
-      title: "Auto-created",
-      count: autoCreatedCount ?? 0,
+      title: "Linked emails",
+      count: linkedEmailCount ?? 0,
       className: "",
     },
   ];
@@ -168,14 +231,11 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
     <div className="grid gap-8">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="crm-page-title">Companies</h1>
-          <p className="crm-muted mt-2 font-bold">
-            Organisations, billing details, and auto-created companies from email domains.
-          </p>
+          <h1 className="crm-page-title">Clients</h1>
         </div>
 
         <Link href="/companies/new" className="crm-button crm-button-primary">
-          Add company
+          Add client
         </Link>
       </header>
 
@@ -189,69 +249,77 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
       </section>
 
       <section className="crm-card overflow-hidden">
-        <form action="/companies" className="border-b border-gray-200 p-4">
-          <label className="grid gap-2 font-bold">
-            <span>Search companies</span>
-            <div className="flex flex-wrap gap-2">
-              <input
-                className="crm-input min-w-72 flex-1"
-                defaultValue={query}
-                name="q"
-                placeholder="Search by name, domain, website or sector"
-              />
-              <button className="crm-button crm-button-primary" type="submit">
-                Search
-              </button>
-              {query && (
-                <Link href="/companies" className="crm-button">
-                  Clear
-                </Link>
-              )}
-            </div>
-          </label>
+        <form
+          action="/companies"
+          className="grid gap-3 border-b border-gray-200 p-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_160px_190px_190px_auto]"
+        >
+          <input
+            className="crm-input"
+            defaultValue={query}
+            name="q"
+            placeholder="Search client name or type"
+          />
+
+          <select className="crm-input" defaultValue={selectedStatus} name="status">
+            {statusFilterOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select className="crm-input" defaultValue={selectedClientType} name="clientType">
+            <option value="all">Client type</option>
+            {clientTypeOptions.map((clientType) => (
+              <option key={clientType} value={clientType}>
+                {clientType}
+              </option>
+            ))}
+          </select>
+
+          <select className="crm-input" defaultValue={selectedSort} name="sort">
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-2">
+            <button className="crm-button crm-button-primary min-w-24" type="submit">
+              Filter
+            </button>
+            {hasActiveFilters && (
+              <Link href="/companies" className="crm-button">
+                Clear
+              </Link>
+            )}
+          </div>
         </form>
 
         <div className="overflow-x-auto">
           <table className="crm-table">
             <thead>
               <tr>
-                <th>Company</th>
-                <th>Domain</th>
-                <th>Sector</th>
+                <th>Client name</th>
+                <th>Client type</th>
                 <th>Status</th>
                 <th>Last contacted</th>
-                <th>Website</th>
               </tr>
             </thead>
 
             <tbody>
               {rows.map((company) => {
-                const websiteUrl = normaliseWebsiteUrl(company.website);
-
                 return (
                   <tr key={company.id} className="transition-colors hover:bg-gray-50">
                     <td>
                       <div className="grid gap-1">
                         <Link href={`/companies/${company.id}`} className="font-bold hover:underline">
-                          {company.name || "Unnamed company"}
+                          {company.name || "Unnamed client"}
                         </Link>
-
-                        <div className="flex flex-wrap gap-2">
-                          {company.auto_created && (
-                            <span className="crm-status-pill crm-status-pill-yellow">
-                              Auto-created
-                            </span>
-                          )}
-                          {company.billing_email || company.billing_address ? (
-                            <span className="crm-status-pill">Billing details</span>
-                          ) : null}
-                        </div>
-
-                        <span className="crm-muted text-sm">{company.notes || "No notes"}</span>
                       </div>
                     </td>
 
-                    <td>{company.domain || "-"}</td>
                     <td>{company.sector || "-"}</td>
 
                     <td>
@@ -259,24 +327,14 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
                     </td>
 
                     <td>{formatDate(company.last_contacted_at)}</td>
-
-                    <td>
-                      {websiteUrl ? (
-                        <a href={websiteUrl} target="_blank" className="font-semibold underline">
-                          Visit
-                        </a>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
                   </tr>
                 );
               })}
 
               {!rows.length && (
                 <tr>
-                  <td colSpan={6}>
-                    {query ? "No companies match that search." : "No companies found."}
+                  <td colSpan={4}>
+                    {hasActiveFilters ? "No clients match these filters." : "No clients found."}
                   </td>
                 </tr>
               )}
@@ -291,7 +349,7 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
 
           <div className="flex flex-wrap items-center gap-2">
             {currentPage > 1 ? (
-              <Link className="crm-button" href={buildPageHref(query, currentPage - 1)}>
+              <Link className="crm-button" href={buildPageHref(currentPage - 1, pageValues)}>
                 Previous
               </Link>
             ) : (
@@ -303,7 +361,7 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
             </span>
 
             {currentPage < totalPages ? (
-              <Link className="crm-button" href={buildPageHref(query, currentPage + 1)}>
+              <Link className="crm-button" href={buildPageHref(currentPage + 1, pageValues)}>
                 Next
               </Link>
             ) : (
@@ -315,7 +373,7 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
 
       {billingCount > 0 && (
         <p className="crm-muted text-sm font-bold">
-          {billingCount} companies on this page have billing details saved.
+          {billingCount} clients on this page have billing details saved.
         </p>
       )}
     </div>

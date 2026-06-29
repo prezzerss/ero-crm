@@ -3,7 +3,7 @@ const wiringSteps = [
     title: "1. Confirm data model",
     status: "In place",
     detail:
-      "Companies, contacts, tags, contact tags, mailing status, and inbound emails have matching screens and SQL.",
+      "Clients, contacts, tags, contact tags, mailing status, and inbound emails have matching screens and SQL.",
   },
   {
     title: "2. Stage inbox data",
@@ -15,7 +15,7 @@ const wiringSteps = [
     title: "3. Review before saving",
     status: "Ready",
     detail:
-      "The team can inspect each email, link it to a company/contact, create a contact, add notes, or ignore it.",
+      "The team can inspect each email, link it to a client/contact, create a contact, add notes, or ignore it.",
   },
   {
     title: "4. Automate carefully",
@@ -26,7 +26,7 @@ const wiringSteps = [
 ];
 
 const dataSurfaces = [
-  "companies",
+  "clients",
   "contacts",
   "tags",
   "contact_tags",
@@ -118,7 +118,7 @@ export default function ReadinessPage() {
               </tr>
               <tr>
                 <td className="font-bold">Contact matching</td>
-                <td>How strict duplicate detection should be across email, company, and name.</td>
+                <td>How strict duplicate detection should be across email, client, and name.</td>
                 <td>Contacts</td>
               </tr>
               <tr>
@@ -129,7 +129,7 @@ export default function ReadinessPage() {
               <tr>
                 <td className="font-bold">Jobs and quotes</td>
                 <td>Whether this should link to Trello, accounting, or a new internal jobs table.</td>
-                <td>Company profiles</td>
+                <td>Client profiles</td>
               </tr>
             </tbody>
           </table>

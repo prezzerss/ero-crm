@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { updateContact } from "../../actions";
 import { ContactForm } from "../../_components/contact-form";
-import { getCompanyOptions, getContactTagIds, getTagOptions } from "../../data";
+import { getCompanyOptions } from "../../data";
 
 type EditContactPageProps = {
   params: Promise<{
@@ -23,11 +23,9 @@ function getFullName(contact: { first_name?: string | null; last_name?: string |
 export default async function EditContactPage({ params }: EditContactPageProps) {
   const { id } = await params;
 
-  const [{ data: contact }, companies, tags, selectedTagIds] = await Promise.all([
+  const [{ data: contact }, companies] = await Promise.all([
     supabase.from("contacts").select("*").eq("id", id).single(),
     getCompanyOptions(),
-    getTagOptions(),
-    getContactTagIds(id),
   ]);
 
   if (!contact) {
@@ -50,8 +48,6 @@ export default async function EditContactPage({ params }: EditContactPageProps) 
         companies={companies}
         contact={contact}
         mode="edit"
-        selectedTagIds={selectedTagIds}
-        tags={tags}
       />
     </div>
   );

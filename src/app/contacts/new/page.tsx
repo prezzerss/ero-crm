@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createContact } from "../actions";
 import { ContactForm } from "../_components/contact-form";
-import { getCompanyOptions, getTagOptions } from "../data";
+import { getCompanyOptions } from "../data";
 
 type NewContactPageProps = {
   searchParams: Promise<{
@@ -15,7 +15,7 @@ type NewContactPageProps = {
 
 export default async function NewContactPage({ searchParams }: NewContactPageProps) {
   const params = await searchParams;
-  const [companies, tags] = await Promise.all([getCompanyOptions(), getTagOptions()]);
+  const companies = await getCompanyOptions();
 
   return (
     <div className="grid gap-8">
@@ -39,7 +39,6 @@ export default async function NewContactPage({ searchParams }: NewContactPagePro
         }}
         defaultCompanyId={params.companyId}
         mode="create"
-        tags={tags}
       />
     </div>
   );

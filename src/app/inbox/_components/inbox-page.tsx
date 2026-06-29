@@ -1,7 +1,6 @@
 import Link from "next/link";
+import { clientTypeOptions } from "@/lib/client-types";
 import { supabase } from "@/lib/supabase";
-import { updateEmailStatus } from "../../emails/actions";
-import { AutoSaveStatusSelect } from "./auto-save-email-controls";
 
 type SourceKey = "projects" | "quotes" | "enquiries";
 
@@ -17,6 +16,7 @@ type EmailRecord = {
   thread_subject?: string | null;
   received_at?: string | null;
   conversation_id?: string | null;
+  suggested_tags?: string[] | null;
   contacts?: {
     id?: string | null;
     first_name?: string | null;
@@ -26,6 +26,7 @@ type EmailRecord = {
   companies?: {
     id?: string | null;
     name?: string | null;
+    sector?: string | null;
   } | null;
 };
 
@@ -47,8 +48,10 @@ type InboxPageContentProps = {
   searchParams: Promise<{
     q?: string;
     source?: string;
-    status?: string;
     page?: string;
+    clientType?: string;
+    sort?: string;
+    view?: string;
   }>;
   source?: SourceKey;
 };
@@ -62,6 +65,7 @@ type ThreadSummary = {
 
 type FilterableEmailQuery = {
   eq(column: string, value: string): FilterableEmailQuery;
+  in(column: string, values: string[]): FilterableEmailQuery;
   or(filters: string): FilterableEmailQuery;
 };
 
@@ -72,16 +76,13 @@ const sourceOptions = [
   { value: "quotes", label: "quotes@", href: "/inbox/quotes" },
 ];
 
-const statusOptions = [
-  { value: "all", label: "All statuses" },
-  { value: "new", label: "New" },
-  { value: "reviewing", label: "Reviewing" },
-  { value: "follow_up", label: "Follow up" },
-  { value: "linked", label: "Linked" },
-  { value: "ignored", label: "Ignored" },
+const sortOptions = [
+  { value: "newest", label: "Date received newest" },
+  { value: "oldest", label: "Date received oldest" },
 ];
 
 const PAGE_SIZE = 25;
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
 
 function getSourceLabel(source?: string | null) {
   if (source === "projects") {
@@ -175,9 +176,13 @@ function buildPageHref(
   formAction: string,
   page: number,
   values: {
+    clientTypeCompanyIds: string[] | null;
     query: string;
+    selectedClientType: string;
+    selectedSort: string;
     selectedSource: string;
     selectedStatus: string;
+    selectedView: string;
     source?: SourceKey;
   },
 ) {
@@ -191,8 +196,16 @@ function buildPageHref(
     params.set("source", values.selectedSource);
   }
 
-  if (values.selectedStatus !== "all") {
-    params.set("status", values.selectedStatus);
+  if (values.selectedClientType !== "all") {
+    params.set("clientType", values.selectedClientType);
+  }
+
+  if (values.selectedSort !== "newest") {
+    params.set("sort", values.selectedSort);
+  }
+
+  if (values.source === "projects" && values.selectedView === "threads") {
+    params.set("view", "threads");
   }
 
   if (page > 1) {
@@ -204,9 +217,43 @@ function buildPageHref(
   return queryString ? `${formAction}?${queryString}` : formAction;
 }
 
+function buildProjectViewHref(
+  formAction: string,
+  view: "list" | "threads",
+  values: {
+    query: string;
+    selectedClientType: string;
+    selectedSort: string;
+    selectedStatus: string;
+  },
+) {
+  const params = new URLSearchParams();
+
+  if (values.query) {
+    params.set("q", values.query);
+  }
+
+  if (values.selectedClientType !== "all") {
+    params.set("clientType", values.selectedClientType);
+  }
+
+  if (values.selectedSort !== "newest") {
+    params.set("sort", values.selectedSort);
+  }
+
+  if (view === "threads") {
+    params.set("view", "threads");
+  }
+
+  const queryString = params.toString();
+
+  return queryString ? `${formAction}?${queryString}` : formAction;
+}
+
 function applyFiltersToQuery(
   emailQuery: FilterableEmailQuery,
   values: {
+    clientTypeCompanyIds: string[] | null;
     query: string;
     selectedSource: string;
     selectedStatus: string;
@@ -225,6 +272,13 @@ function applyFiltersToQuery(
     filteredQuery = filteredQuery.eq("status", values.selectedStatus);
   }
 
+  if (values.clientTypeCompanyIds) {
+    filteredQuery = filteredQuery.in(
+      "company_id",
+      values.clientTypeCompanyIds.length ? values.clientTypeCompanyIds : [EMPTY_UUID],
+    );
+  }
+
   if (values.query) {
     const escapedQuery = escapeSearchValue(values.query);
 
@@ -239,6 +293,10 @@ function applyFiltersToQuery(
   }
 
   return filteredQuery;
+}
+
+function normaliseSort(sort?: string) {
+  return sortOptions.some((option) => option.value === sort) ? sort ?? "newest" : "newest";
 }
 
 function buildProjectThreadSummaries(emails: EmailRecord[]) {
@@ -272,16 +330,35 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
   const params = await searchParams;
   const query = params.q?.trim().toLowerCase() ?? "";
   const selectedSource = source ?? params.source ?? "all";
-  const selectedStatus = params.status ?? "all";
+  const selectedStatus = "all";
+  const selectedClientType = params.clientType ?? "all";
+  const selectedSort = normaliseSort(params.sort);
+  const selectedView = source === "projects" && params.view === "threads" ? "threads" : "list";
   const formAction = source ? `/inbox/${source}` : "/inbox";
   const currentPage = getCurrentPage(params.page);
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
+  let clientTypeCompanyIds: string[] | null = null;
+
+  if (selectedClientType !== "all") {
+    const { data: clientRows } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("sector", selectedClientType);
+
+    clientTypeCompanyIds = (clientRows ?? [])
+      .map((client) => client.id as string | null)
+      .filter((clientId): clientId is string => Boolean(clientId));
+  }
 
   const filterValues = {
+    clientTypeCompanyIds,
     query,
+    selectedClientType,
+    selectedSort,
     selectedSource,
     selectedStatus,
+    selectedView,
     source,
   };
 
@@ -298,14 +375,15 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
         ),
         companies (
           id,
-          name
+          name,
+          sector
         )
       `,
       {
         count: "exact",
       },
     )
-    .order("received_at", { ascending: false })
+    .order("received_at", { ascending: selectedSort === "oldest" })
     .range(from, to);
 
   const emailQuery = applyFiltersToQuery(
@@ -319,12 +397,12 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
     filterValues,
   ) as unknown as PromiseLike<CountQueryResponse>;
 
-  const baseNewCountQuery = supabase.from("inbound_emails").select("id", { count: "exact", head: true });
-  const newCountQuery = applyFiltersToQuery(
-    baseNewCountQuery as unknown as FilterableEmailQuery,
+  const baseReviewingCountQuery = supabase.from("inbound_emails").select("id", { count: "exact", head: true });
+  const reviewingCountQuery = applyFiltersToQuery(
+    baseReviewingCountQuery as unknown as FilterableEmailQuery,
     {
       ...filterValues,
-      selectedStatus: "new",
+      selectedStatus: "reviewing",
     },
   ) as unknown as PromiseLike<CountQueryResponse>;
 
@@ -349,13 +427,13 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
   const [
     { data, error, count },
     { count: totalMatchingCount },
-    { count: newCount },
+    { count: reviewingCount },
     { count: followUpCount },
     { count: linkedCount },
   ] = await Promise.all([
     emailQuery,
     countQuery,
-    newCountQuery,
+    reviewingCountQuery,
     followUpCountQuery,
     linkedCountQuery,
   ]);
@@ -378,7 +456,11 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
   const emails = (data ?? []) as EmailRecord[];
   const totalEmails = count ?? totalMatchingCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalEmails / PAGE_SIZE));
-  const hasActiveFilters = Boolean(query) || (!source && selectedSource !== "all") || selectedStatus !== "all";
+  const hasActiveFilters =
+    Boolean(query) ||
+    (!source && selectedSource !== "all") ||
+    selectedClientType !== "all" ||
+    selectedSort !== "newest";
 
   let projectThreadEmails: EmailRecord[] = [];
 
@@ -393,15 +475,19 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
           job_number,
           thread_subject,
           conversation_id,
-          received_at
+          received_at,
+          suggested_tags
         `,
       )
       .eq("source_inbox", "projects")
-      .order("received_at", { ascending: false })
+      .order("received_at", { ascending: selectedSort === "oldest" })
       .limit(200);
 
-    if (selectedStatus !== "all") {
-      threadQuery = threadQuery.eq("status", selectedStatus);
+    if (clientTypeCompanyIds) {
+      threadQuery = threadQuery.in(
+        "company_id",
+        clientTypeCompanyIds.length ? clientTypeCompanyIds : [EMPTY_UUID],
+      );
     }
 
     if (query) {
@@ -456,8 +542,8 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
         </div>
 
         <div className="crm-card crm-kpi crm-kpi-yellow p-5">
-          <p className="crm-muted font-bold">New</p>
-          <p className="mt-2 text-3xl font-black">{newCount ?? 0}</p>
+          <p className="crm-muted font-bold">Reviewing</p>
+          <p className="mt-2 text-3xl font-black">{reviewingCount ?? 0}</p>
         </div>
 
         <div className="crm-card crm-kpi crm-kpi-orange p-5">
@@ -472,6 +558,23 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
       </section>
 
       {source === "projects" && (
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className={`crm-button ${selectedView === "list" ? "crm-button-primary" : ""}`}
+            href={buildProjectViewHref(formAction, "list", filterValues)}
+          >
+            List view
+          </Link>
+          <Link
+            className={`crm-button ${selectedView === "threads" ? "crm-button-primary" : ""}`}
+            href={buildProjectViewHref(formAction, "threads", filterValues)}
+          >
+            Thread view
+          </Link>
+        </div>
+      )}
+
+      {source === "projects" && selectedView === "threads" && (
         <section className="crm-card overflow-hidden">
           <div className="border-b border-[var(--border-soft)] p-5">
             <h2 className="crm-section-title">Project threads</h2>
@@ -502,10 +605,16 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
       <section className="crm-card overflow-hidden">
         <form
           action={formAction}
-          className={`grid gap-3 border-b border-gray-200 p-4 ${
-            source ? "md:grid-cols-[1fr_170px_auto]" : "md:grid-cols-[1fr_180px_170px_auto]"
+          className={`grid gap-3 border-b border-gray-200 p-4 md:grid-cols-2 ${
+            source
+              ? "xl:grid-cols-[minmax(220px,1fr)_190px_210px_auto]"
+              : "xl:grid-cols-[minmax(220px,1fr)_170px_190px_210px_auto]"
           }`}
         >
+          {source === "projects" && selectedView === "threads" && (
+            <input name="view" type="hidden" value="threads" />
+          )}
+
           <label className="grid gap-2 font-bold md:contents">
             <span className="sr-only">Search inbox</span>
             <input
@@ -530,9 +639,21 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
           )}
 
           <label className="grid gap-2 font-bold md:contents">
-            <span className="sr-only">Status</span>
-            <select className="crm-input" defaultValue={selectedStatus} name="status">
-              {statusOptions.map((option) => (
+            <span className="sr-only">Client type</span>
+            <select className="crm-input" defaultValue={selectedClientType} name="clientType">
+              <option value="all">Client type</option>
+              {clientTypeOptions.map((clientType) => (
+                <option key={clientType} value={clientType}>
+                  {clientType}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2 font-bold md:contents">
+            <span className="sr-only">Sort</span>
+            <select className="crm-input" defaultValue={selectedSort} name="sort">
+              {sortOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -553,113 +674,108 @@ export async function InboxPageContent({ searchParams, source }: InboxPageConten
           </div>
         </form>
 
-        <div className="overflow-x-auto">
-          <table className="crm-table">
-            <thead>
-              <tr>
-                <th>Message</th>
-                <th>Inbox</th>
-                <th>Job / thread</th>
-                <th>Linked to</th>
-                <th>Received</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+        {selectedView === "list" && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="crm-table">
+                <thead>
+                  <tr>
+                    <th>Message</th>
+                    <th>Inbox</th>
+                    <th>Job / thread</th>
+                    <th>Linked to</th>
+                    <th>Received</th>
+                  </tr>
+                </thead>
 
-            <tbody>
-              {emails.map((email) => (
-                <tr key={email.id} className="hover:bg-gray-50">
-                  <td>
-                    <div className="grid gap-1">
-                      <Link href={`/inbox/message/${email.id}`} className="font-bold underline">
-                        {email.subject || "No subject"}
-                      </Link>
-                      <span className="crm-muted">{email.from_name || email.from_email || "Unknown sender"}</span>
-                      {email.snippet && (
-                        <span className="crm-muted max-w-xl truncate text-sm">{email.snippet}</span>
-                      )}
-                    </div>
-                  </td>
+                <tbody>
+                  {emails.map((email) => (
+                    <tr key={email.id} className="hover:bg-gray-50">
+                      <td>
+                        <div className="grid gap-1">
+                          <Link href={`/inbox/message/${email.id}`} className="font-bold underline">
+                            {email.subject || "No subject"}
+                          </Link>
+                          <span className="crm-muted">{email.from_name || email.from_email || "Unknown sender"}</span>
+                          {email.snippet && (
+                            <span className="crm-muted max-w-xl truncate text-sm">{email.snippet}</span>
+                          )}
+                        </div>
+                      </td>
 
-                  <td>
-                    <span className="crm-status-pill">{getSourceLabel(email.source_inbox)}</span>
-                  </td>
+                      <td>
+                        <span className="crm-status-pill">{getSourceLabel(email.source_inbox)}</span>
+                      </td>
 
-                  <td>
-                    {email.source_inbox === "projects" ? (
-                      <Link href={getThreadHref(email)} className="font-bold underline">
-                        {getThreadLabel(email)}
-                      </Link>
-                    ) : (
-                      getThreadLabel(email)
-                    )}
-                  </td>
+                      <td>
+                        {email.source_inbox === "projects" ? (
+                          <Link href={getThreadHref(email)} className="font-bold underline">
+                            {getThreadLabel(email)}
+                          </Link>
+                        ) : (
+                          getThreadLabel(email)
+                        )}
+                      </td>
 
-                  <td>
-                    <div className="grid gap-1">
-                      {email.contacts?.id ? (
-                        <Link href={`/contacts/${email.contacts.id}`} className="font-bold underline">
-                          {getContactName(email)}
-                        </Link>
-                      ) : (
-                        <span className="crm-muted">No contact</span>
-                      )}
-                      {email.companies?.id && (
-                        <Link href={`/companies/${email.companies.id}`} className="crm-muted underline">
-                          {email.companies.name}
-                        </Link>
-                      )}
-                    </div>
-                  </td>
+                      <td>
+                        <div className="grid gap-1">
+                          {email.contacts?.id ? (
+                            <Link href={`/contacts/${email.contacts.id}`} className="font-bold underline">
+                              {getContactName(email)}
+                            </Link>
+                          ) : (
+                            <span className="crm-muted">No contact</span>
+                          )}
+                          {email.companies?.id && (
+                            <Link href={`/companies/${email.companies.id}`} className="crm-muted underline">
+                              {email.companies.name}
+                            </Link>
+                          )}
+                        </div>
+                      </td>
 
-                  <td>{formatDate(email.received_at)}</td>
+                      <td>{formatDate(email.received_at)}</td>
+                    </tr>
+                  ))}
 
-                  <td>
-                    <AutoSaveStatusSelect
-                      action={updateEmailStatus.bind(null, email.id)}
-                      options={statusOptions.filter((option) => option.value !== "all")}
-                      value={email.status ?? "new"}
-                    />
-                  </td>
-                </tr>
-              ))}
+                  {!emails.length && (
+                    <tr>
+                      <td colSpan={5}>No inbox items match these filters.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-              {!emails.length && (
-                <tr>
-                  <td colSpan={6}>No inbox items match these filters.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-4 py-3">
+              <p className="crm-muted font-bold">
+                Showing {emails.length ? from + 1 : 0}-{Math.min(to + 1, totalEmails)} of {totalEmails}
+              </p>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-4 py-3">
-          <p className="crm-muted font-bold">
-            Showing {emails.length ? from + 1 : 0}-{Math.min(to + 1, totalEmails)} of {totalEmails}
-          </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {currentPage > 1 ? (
+                  <Link className="crm-button" href={buildPageHref(formAction, currentPage - 1, filterValues)}>
+                    Previous
+                  </Link>
+                ) : (
+                  <span className="crm-button opacity-50">Previous</span>
+                )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            {currentPage > 1 ? (
-              <Link className="crm-button" href={buildPageHref(formAction, currentPage - 1, filterValues)}>
-                Previous
-              </Link>
-            ) : (
-              <span className="crm-button opacity-50">Previous</span>
-            )}
+                <span className="crm-muted font-bold">
+                  Page {currentPage} of {totalPages}
+                </span>
 
-            <span className="crm-muted font-bold">
-              Page {currentPage} of {totalPages}
-            </span>
-
-            {currentPage < totalPages ? (
-              <Link className="crm-button" href={buildPageHref(formAction, currentPage + 1, filterValues)}>
-                Next
-              </Link>
-            ) : (
-              <span className="crm-button opacity-50">Next</span>
-            )}
-          </div>
-        </div>
+                {currentPage < totalPages ? (
+                  <Link className="crm-button" href={buildPageHref(formAction, currentPage + 1, filterValues)}>
+                    Next
+                  </Link>
+                ) : (
+                  <span className="crm-button opacity-50">Next</span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );

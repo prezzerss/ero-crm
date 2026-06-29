@@ -400,7 +400,12 @@ async function syncInbox(source: SourceInbox): Promise<SyncResult> {
       .maybeSingle();
 
     const sinceIso = getSinceIso(state?.last_synced_at);
+
+    console.log(`[inbox-sync] Fetching messages for source "${source}" since ${sinceIso}`);
+
     const messages = await listRecentInboxMessages(inbox.mailbox, sinceIso);
+
+    console.log(`[inbox-sync] Retrieved ${messages.length} messages for source "${source}"`);
 
     // Process oldest first so contact.last_contacted_at ends on the newest email.
     messages.sort((a, b) => {

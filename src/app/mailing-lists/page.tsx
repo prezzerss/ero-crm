@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTagOptions } from "@/app/contacts/data";
 import { supabase } from "@/lib/supabase";
 import { formatStatus } from "@/lib/format";
 import { createMailingList } from "./actions";
@@ -17,7 +18,7 @@ type ContactRecord = {
 };
 
 export default async function MailingListsPage() {
-  const [{ data: listData, error: listError }, { data: contactData }] = await Promise.all([
+  const [{ data: listData, error: listError }, { data: contactData }, tagOptions] = await Promise.all([
     supabase
       .from("mailing_lists")
       .select(`
@@ -34,6 +35,7 @@ export default async function MailingListsPage() {
       .from("contacts")
       .select("id, mailing_status")
       .order("created_at", { ascending: false }),
+    getTagOptions(),
   ]);
 
   if (listError) {
@@ -121,6 +123,18 @@ export default async function MailingListsPage() {
               <option value="active">Active</option>
               <option value="paused">Paused</option>
               <option value="archived">Archived</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2 font-bold">
+            <span>Start with tag</span>
+            <select className="crm-input" defaultValue="" name="tag_id">
+              <option value="">No starting tag</option>
+              {tagOptions.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
             </select>
           </label>
 

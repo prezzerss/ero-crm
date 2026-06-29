@@ -148,14 +148,14 @@ export function AutoSaveEmailReviewForm({
       </label>
 
       <label className="grid gap-2 font-bold">
-        <span>Company</span>
+        <span>Client</span>
         <select
           className="crm-input"
           defaultValue={email.company_id ?? ""}
           name="company_id"
           onChange={() => submit()}
         >
-          <option value="">No company linked</option>
+          <option value="">No client linked</option>
           {companies.map((company) => (
             <option key={company.id} value={company.id}>
               {company.name}

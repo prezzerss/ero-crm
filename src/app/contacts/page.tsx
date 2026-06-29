@@ -19,11 +19,6 @@ type ContactRecord = {
   [key: string]: unknown;
 };
 
-type ContactTagRow = {
-  contact_id?: string | null;
-  tags?: unknown;
-};
-
 type ContactsPageProps = {
   searchParams: Promise<{
     page?: string;
@@ -31,6 +26,7 @@ type ContactsPageProps = {
     source?: string;
     status?: string;
     mailing?: string;
+    sort?: string;
   }>;
 };
 
@@ -47,6 +43,14 @@ const mailingOptions = [
   { value: "yes", label: "On list" },
   { value: "no", label: "No list" },
   { value: "unknown", label: "Unknown" },
+];
+
+const defaultStatusOptions = ["active", "inactive", "offline"];
+
+const sortOptions = [
+  { value: "alpha_az", label: "Alphabetical A-Z" },
+  { value: "alpha_za", label: "Alphabetical Z-A" },
+  { value: "recent", label: "Recently added" },
 ];
 
 const PAGE_SIZE = 25;
@@ -67,6 +71,7 @@ function buildPageHref(
     mailing: string;
     query: string;
     source: string;
+    sort: string;
     status: string;
   },
 ) {
@@ -86,6 +91,10 @@ function buildPageHref(
 
   if (values.mailing !== "all") {
     params.set("mailing", values.mailing);
+  }
+
+  if (values.sort !== "alpha_az") {
+    params.set("sort", values.sort);
   }
 
   if (page > 1) {
@@ -142,7 +151,7 @@ function getCompany(contact: ContactRecord) {
 }
 
 function getCompanyName(contact: ContactRecord) {
-  return getCompany(contact)?.name?.trim() || "No company";
+  return getCompany(contact)?.name?.trim() || "No client";
 }
 
 function getFullName(contact: ContactRecord) {
@@ -304,7 +313,6 @@ function matchesQuery(contact: ContactRecord, query: string) {
     getCompanyName(contact),
     getStatus(contact),
     getSourceInbox(contact),
-    getTags(contact).join(" "),
   ]
     .filter(Boolean)
     .join(" ")
@@ -313,12 +321,17 @@ function matchesQuery(contact: ContactRecord, query: string) {
   return haystack.includes(query);
 }
 
+function normaliseSort(sort?: string) {
+  return sortOptions.some((option) => option.value === sort) ? sort ?? "alpha_az" : "alpha_az";
+}
+
 export default async function ContactsPage({ searchParams }: ContactsPageProps) {
   const params = await searchParams;
   const query = params.q?.trim().toLowerCase() ?? "";
   const selectedSource = params.source ?? "all";
   const selectedStatus = params.status ?? "all";
   const selectedMailing = params.mailing ?? "all";
+  const selectedSort = normaliseSort(params.sort);
   const requestedPage = getCurrentPage(params.page);
 
   const { data, error } = await supabase
@@ -342,44 +355,9 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
   }
 
   const baseContacts = (data ?? []) as ContactRecord[];
-  const contactTagsByContactId = new Map<string, string[]>();
-
-  if (baseContacts.length) {
-    const { data: contactTagRows } = await supabase
-      .from("contact_tags")
-      .select(`
-        contact_id,
-        tags (
-          name
-        )
-      `)
-      .in(
-        "contact_id",
-        baseContacts.map((contact) => contact.id),
-      );
-
-    ((contactTagRows ?? []) as ContactTagRow[]).forEach((tagRow) => {
-      if (!tagRow.contact_id) {
-        return;
-      }
-
-      const tagName = getTagName(tagRow.tags);
-
-      if (!tagName) {
-        return;
-      }
-
-      const currentTags = contactTagsByContactId.get(tagRow.contact_id) ?? [];
-      contactTagsByContactId.set(tagRow.contact_id, [...currentTags, tagName]);
-    });
-  }
-
-  const contacts = baseContacts.map((contact) => ({
-    ...contact,
-    contact_tags: contactTagsByContactId.get(contact.id) ?? contact.contact_tags,
-  }));
+  const contacts = baseContacts;
   const statusOptions = Array.from(
-    new Set(contacts.map((contact) => getStatus(contact).toLowerCase())),
+    new Set([...defaultStatusOptions, ...contacts.map((contact) => getStatus(contact).toLowerCase())]),
   ).sort();
 
   const filteredContacts = contacts.filter((contact) => {
@@ -391,6 +369,21 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
       (selectedStatus === "all" || getStatus(contact).toLowerCase() === selectedStatus) &&
       (selectedMailing === "all" || mailingStatus === selectedMailing)
     );
+  });
+  const sortedContacts = [...filteredContacts].sort((firstContact, secondContact) => {
+    if (selectedSort === "recent") {
+      return (
+        new Date(secondContact.created_at ?? 0).getTime() -
+        new Date(firstContact.created_at ?? 0).getTime()
+      );
+    }
+
+    const firstName = getFullName(firstContact).toLowerCase();
+    const secondName = getFullName(secondContact).toLowerCase();
+
+    return selectedSort === "alpha_za"
+      ? secondName.localeCompare(firstName)
+      : firstName.localeCompare(secondName);
   });
 
   const mailingCount = contacts.filter(
@@ -405,16 +398,18 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
     Boolean(query) ||
     selectedSource !== "all" ||
     selectedStatus !== "all" ||
-    selectedMailing !== "all";
-  const totalPages = Math.max(1, Math.ceil(filteredContacts.length / PAGE_SIZE));
+    selectedMailing !== "all" ||
+    selectedSort !== "alpha_az";
+  const totalPages = Math.max(1, Math.ceil(sortedContacts.length / PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE;
-  const paginatedContacts = filteredContacts.slice(from, to);
+  const paginatedContacts = sortedContacts.slice(from, to);
   const pageValues = {
     mailing: selectedMailing,
     query,
     source: selectedSource,
+    sort: selectedSort,
     status: selectedStatus,
   };
 
@@ -455,13 +450,13 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
       <section className="crm-card overflow-hidden">
         <form
           action="/contacts"
-          className="grid gap-3 border-b border-gray-200 p-4 lg:grid-cols-[minmax(220px,1fr)_180px_160px_170px_auto]"
+          className="grid gap-3 border-b border-gray-200 p-4 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_150px_150px_170px_180px_auto]"
         >
           <input
             className="crm-input"
             defaultValue={params.q ?? ""}
             name="q"
-            placeholder="Search name, email, company, tag..."
+            placeholder="Search name, email, client..."
           />
 
           <select className="crm-input" defaultValue={selectedSource} name="source">
@@ -489,6 +484,14 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
             ))}
           </select>
 
+          <select className="crm-input" defaultValue={selectedSort} name="sort">
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
           <div className="flex gap-2">
             <button className="crm-button crm-button-primary min-w-24" type="submit">
               Filter
@@ -504,8 +507,8 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
           <p className="crm-muted font-bold">
-            Showing {paginatedContacts.length ? from + 1 : 0}-{Math.min(to, filteredContacts.length)} of{" "}
-            {filteredContacts.length}
+            Showing {paginatedContacts.length ? from + 1 : 0}-{Math.min(to, sortedContacts.length)} of{" "}
+            {sortedContacts.length}
           </p>
           <div className="flex flex-wrap gap-2">
             <span className="crm-status-pill">projects@ {projectsCount}</span>
@@ -519,10 +522,9 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
             <thead>
               <tr>
                 <th>Contact</th>
-                <th>Company</th>
-                <th>Source</th>
-                <th>Tags / lists</th>
+                <th>Client</th>
                 <th>Status</th>
+                <th>Source</th>
                 <th>Added</th>
               </tr>
             </thead>
@@ -530,8 +532,6 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
             <tbody>
               {paginatedContacts.map((contact) => {
                 const company = getCompany(contact);
-                const tags = getTags(contact);
-                const mailingStatus = getMailingStatus(contact);
 
                 return (
                   <tr key={contact.id} className="hover:bg-gray-50">
@@ -564,27 +564,11 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
                     </td>
 
                     <td>
-                      <span className="crm-status-pill">{getSourceInbox(contact)}</span>
-                    </td>
-
-                    <td>
-                      <div className="flex max-w-sm flex-wrap gap-2">
-                        <span className="crm-status-pill">{mailingStatus.label}</span>
-                        {tags.slice(0, 4).map((tag) => (
-                          <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-bold" key={tag}>
-                            {tag}
-                          </span>
-                        ))}
-                        {tags.length > 4 && (
-                          <span className="crm-muted text-sm font-bold">
-                            +{tags.length - 4} more
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    <td>
                       <span className="crm-status-pill">{formatStatus(getStatus(contact))}</span>
+                    </td>
+
+                    <td>
+                      <span className="crm-status-pill">{getSourceInbox(contact)}</span>
                     </td>
 
                     <td>{formatCreatedDate(contact)}</td>
@@ -592,9 +576,9 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
                 );
               })}
 
-              {!filteredContacts.length && (
+              {!sortedContacts.length && (
                 <tr>
-                  <td colSpan={6}>No contacts match these filters.</td>
+                  <td colSpan={5}>No contacts match these filters.</td>
                 </tr>
               )}
             </tbody>

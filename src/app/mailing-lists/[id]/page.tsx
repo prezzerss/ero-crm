@@ -176,7 +176,7 @@ export default async function MailingListDetailPage({ params }: MailingListDetai
               <thead>
                 <tr>
                   <th>Contact</th>
-                  <th>Company</th>
+                  <th>Client</th>
                   <th>Mailing</th>
                   <th>Action</th>
                 </tr>
@@ -201,7 +201,7 @@ export default async function MailingListDetailPage({ params }: MailingListDetai
                             {company.name}
                           </Link>
                         ) : (
-                          "No company"
+                          "No client"
                         )}
                       </td>
                       <td>

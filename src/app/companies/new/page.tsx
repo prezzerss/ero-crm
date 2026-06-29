@@ -7,10 +7,10 @@ export default function NewCompanyPage() {
     <div className="grid gap-8">
       <header>
         <Link href="/companies" className="font-bold underline">
-          Back to companies
+          Back to clients
         </Link>
 
-        <h1 className="crm-page-title mt-6">Add company</h1>
+        <h1 className="crm-page-title mt-6">Add client</h1>
       </header>
 
       <CompanyForm action={createCompany} cancelHref="/companies" mode="create" />

@@ -113,7 +113,7 @@ export default async function CompanyDetailPage({ params }: CompanyPageProps) {
         <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <Link href="/companies" className="font-bold underline">
-              Back to companies
+              Back to clients
             </Link>
             <h1 className="crm-page-title mt-4">{company.name}</h1>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -126,7 +126,7 @@ export default async function CompanyDetailPage({ params }: CompanyPageProps) {
 
           <div className="flex flex-wrap gap-3">
             <Link href={`/companies/${id}/edit`} className="crm-button">
-              Edit company
+              Edit client
             </Link>
             <Link href={`/contacts/new?companyId=${id}`} className="crm-button crm-button-primary">
               Add contact
@@ -167,10 +167,10 @@ export default async function CompanyDetailPage({ params }: CompanyPageProps) {
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="crm-card p-6">
-          <h2 className="crm-section-title">Company details</h2>
+          <h2 className="crm-section-title">Client details</h2>
           <div className="crm-info-grid mt-5">
             <div className="crm-info-row">
-              <span className="crm-info-label">Sector:</span>
+              <span className="crm-info-label">Client type:</span>
               <span className="crm-info-value">{company.sector || "-"}</span>
             </div>
             <div className="crm-info-row">
@@ -264,7 +264,7 @@ export default async function CompanyDetailPage({ params }: CompanyPageProps) {
                   <td>{getThreadLabel(item)}</td>
                   <td>{formatDate(item.received_at)}</td>
                   <td>
-                    <span className="crm-status-pill">{formatStatus(item.status, "New")}</span>
+                    <span className="crm-status-pill">{formatStatus(item.status, "Needs review")}</span>
                   </td>
                 </tr>
               ))}
@@ -324,7 +324,7 @@ export default async function CompanyDetailPage({ params }: CompanyPageProps) {
 
               {!contacts?.length && (
                 <tr>
-                  <td colSpan={4}>No contacts linked to this company yet.</td>
+                  <td colSpan={4}>No contacts linked to this client yet.</td>
                 </tr>
               )}
             </tbody>

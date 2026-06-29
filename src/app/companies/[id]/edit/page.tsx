@@ -27,7 +27,7 @@ export default async function EditCompanyPage({ params }: EditCompanyPageProps) 
     <div className="grid gap-8">
       <header>
         <Link href={`/companies/${id}`} className="font-bold underline">
-          Back to company
+          Back to client
         </Link>
 
         <h1 className="crm-page-title mt-6">Edit {company.name}</h1>
