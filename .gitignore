@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# private, local-only HubSpot import sources and reports
+/data/hubspot/*
+!/data/hubspot/README.md
+
 # vercel
 .vercel
 

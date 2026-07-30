@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { clientTypeOptions } from "@/lib/client-types";
 import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 function cleanString(value: FormDataEntryValue | null) {
   if (typeof value !== "string") {
@@ -115,4 +117,47 @@ export async function updateCompany(companyId: string, formData: FormData) {
   revalidatePath("/companies");
   revalidatePath(`/companies/${companyId}`);
   redirect(`/companies/${companyId}`);
+}
+
+export type UpdateCompanyClientTypeResult =
+  | { ok: true }
+  | { error: string; ok: false };
+
+export async function updateCompanyClientType(
+  companyId: string,
+  nextClientType: string,
+): Promise<UpdateCompanyClientTypeResult> {
+  const clientType = nextClientType.trim();
+
+  if (!companyId.trim()) {
+    return { error: "Missing client ID.", ok: false };
+  }
+
+  if (clientType && !clientTypeOptions.includes(clientType)) {
+    return { error: "Choose a valid client type.", ok: false };
+  }
+
+  const authenticatedSupabase = await createServerSupabaseClient();
+  const { data, error } = await authenticatedSupabase
+    .from("companies")
+    .update({
+      sector: clientType || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", companyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    return {
+      error: error?.message ?? "Could not update this client.",
+      ok: false,
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/companies");
+  revalidatePath(`/companies/${companyId}`);
+
+  return { ok: true };
 }
