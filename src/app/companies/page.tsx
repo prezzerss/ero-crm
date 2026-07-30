@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { updateCompanyClientType } from "@/app/companies/actions";
+import { InlineClientTypeSelect } from "@/app/companies/_components/inline-client-type-select";
 import { clientTypeOptions } from "@/lib/client-types";
 import { supabase } from "@/lib/supabase";
 import { formatStatus } from "@/lib/format";
@@ -320,7 +322,14 @@ export default async function CompaniesPage({ searchParams }: CompaniesPageProps
                       </div>
                     </td>
 
-                    <td>{company.sector || "-"}</td>
+                    <td>
+                      <InlineClientTypeSelect
+                        action={updateCompanyClientType.bind(null, company.id)}
+                        clientName={company.name || "Unnamed client"}
+                        options={clientTypeOptions}
+                        value={company.sector}
+                      />
+                    </td>
 
                     <td>
                       <span className="crm-status-pill">{formatStatus(company.status)}</span>
