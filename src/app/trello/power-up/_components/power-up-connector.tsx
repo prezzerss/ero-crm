@@ -157,7 +157,7 @@ export function PowerUpConnector() {
     <main className="trello-power-up-frame p-5">
       <p className="font-bold">Easy Read Online CRM Power-Up connector</p>
       <Script
-        onLoad={initialisePowerUp}
+        onReady={initialisePowerUp}
         src="https://p.trellocdn.com/power-up.min.js"
         strategy="afterInteractive"
       />

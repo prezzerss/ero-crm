@@ -39,7 +39,27 @@ If the database already contains a free-text `contacts.contact_type` column, the
 
 ## Quote-tool API contract
 
-### Request
+### Search companies
+
+```http
+GET /api/integrations/companies?search=Bristol
+Authorization: Bearer {CRM_INTEGRATION_SECRET}
+```
+
+The endpoint performs a case-insensitive partial search of company names, returns at most 20 results ordered by name, and responds with:
+
+```json
+[
+  {
+    "id": "company-id",
+    "name": "Bristol CC"
+  }
+]
+```
+
+Use the selected `id` for all subsequent CRM requests. An empty array means no companies matched. A missing search term returns `400`; a missing or incorrect bearer secret returns `401`.
+
+### Get quoting contacts
 
 ```http
 GET /api/integrations/companies/{companyId}/quoting-contacts
@@ -47,8 +67,6 @@ Authorization: Bearer {CRM_INTEGRATION_SECRET}
 ```
 
 Call this from the quote tool's server, not directly from a browser. `{companyId}` must be the CRM company's UUID, not its name.
-
-### Success response
 
 The endpoint returns HTTP `200` and a JSON array. An empty array means that the company has no quoting contacts.
 
