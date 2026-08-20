@@ -67,7 +67,9 @@ export function ReferenceJobsForm() {
         </button>
       </form>
       <Script
-        onLoad={initialiseIframe}
+        onReady={() => {
+          void initialiseIframe();
+        }}
         src="https://p.trellocdn.com/power-up.min.js"
         strategy="afterInteractive"
       />
