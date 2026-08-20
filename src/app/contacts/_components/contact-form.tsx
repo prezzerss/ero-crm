@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps } from "react";
+import { contactTypeOptions, normaliseContactType } from "@/lib/contact-types";
 import type { CompanyOption } from "../data";
 
 type ContactFormContact = {
@@ -8,6 +9,8 @@ type ContactFormContact = {
   email?: string | null;
   role?: string | null;
   company_id?: string | null;
+  contact_type?: string | null;
+  is_default_quoting_contact?: boolean | null;
   status?: string | null;
   source_inbox?: string | null;
   source?: string | null;
@@ -144,6 +147,39 @@ export function ContactForm({
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="grid gap-2 font-bold">
+          <span>Contact type</span>
+          <select
+            className="crm-input"
+            defaultValue={normaliseContactType(contact?.contact_type)}
+            name="contact_type"
+          >
+            {contactTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className="crm-muted text-sm font-normal">
+            Quoting contacts must have a name, client and email address.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-lg border border-[var(--border-soft)] p-4 font-bold">
+          <input
+            className="mt-1 h-5 w-5"
+            defaultChecked={Boolean(contact?.is_default_quoting_contact)}
+            name="is_default_quoting_contact"
+            type="checkbox"
+          />
+          <span>
+            Default quoting contact
+            <span className="crm-muted mt-1 block text-sm font-normal">
+              Optional. Only one quoting contact can be the default for each client.
+            </span>
+          </span>
         </label>
 
         <label className="grid gap-2 font-bold">

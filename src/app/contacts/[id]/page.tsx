@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { formatContactType } from "@/lib/contact-types";
 import { formatStatus } from "@/lib/format";
 import { linkInboxItemToContact } from "@/app/emails/actions";
 import { updateContactNotes } from "../actions";
@@ -16,6 +17,8 @@ type ContactRecord = {
   last_name?: string | null;
   email?: string | null;
   role?: string | null;
+  contact_type?: string | null;
+  is_default_quoting_contact?: boolean | null;
   status?: string | null;
   source_inbox?: string | null;
   source?: string | null;
@@ -274,6 +277,14 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
             <h1 className="crm-page-title mt-4">{contactName}</h1>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="crm-status-pill">{formatStatus(typedContact.status)}</span>
+              <span className="crm-status-pill">
+                {formatContactType(typedContact.contact_type)}
+              </span>
+              {typedContact.is_default_quoting_contact && (
+                <span className="crm-status-pill crm-status-pill-yellow">
+                  Default quoting contact
+                </span>
+              )}
               <span className="crm-status-pill crm-status-pill-yellow">
                 {getMailingLabel(typedContact)}
               </span>
@@ -343,6 +354,13 @@ export default async function ContactDetailPage({ params }: ContactPageProps) {
             <div className="crm-info-row">
               <span className="crm-info-label">Role:</span>
               <span className="crm-info-value">{typedContact.role || "-"}</span>
+            </div>
+            <div className="crm-info-row">
+              <span className="crm-info-label">Contact type:</span>
+              <span className="crm-info-value">
+                {formatContactType(typedContact.contact_type)}
+                {typedContact.is_default_quoting_contact ? " — Default" : ""}
+              </span>
             </div>
             <div className="crm-info-row">
               <span className="crm-info-label">Added:</span>

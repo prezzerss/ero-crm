@@ -119,6 +119,30 @@ export async function updateCompany(companyId: string, formData: FormData) {
   redirect(`/companies/${companyId}`);
 }
 
+export async function updateCompanyPreferences(companyId: string, formData: FormData) {
+  const authenticatedSupabase = await createServerSupabaseClient();
+  const { error } = await authenticatedSupabase
+    .from("companies")
+    .update({
+      preferences: cleanString(formData.get("preferences")),
+      preferences_reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", companyId);
+
+  if (error) {
+    if (/preferences|preferences_reviewed_at|schema cache|does not exist/i.test(error.message)) {
+      throw new Error(
+        "Company preferences are not available in Supabase yet. Run supabase/trello-crm-quoting-schema.sql, then retry.",
+      );
+    }
+
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/companies/${companyId}`);
+}
+
 export type UpdateCompanyClientTypeResult =
   | { ok: true }
   | { error: string; ok: false };

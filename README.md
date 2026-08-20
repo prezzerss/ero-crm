@@ -1,5 +1,16 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Trello and quote-tool integration
+
+The CRM includes company preferences, Trello-linked projects, related-job lookup,
+and dedicated quoting contacts. Setup instructions and the server-to-server API
+contract are in
+[`docs/trello-and-quote-tool-integration.md`](docs/trello-and-quote-tool-integration.md).
+
+Run the idempotent database migration in
+[`supabase/trello-crm-quoting-schema.sql`](supabase/trello-crm-quoting-schema.sql)
+before using these features.
+
 ## Historical HubSpot import
 
 The one-off importer is a local Node script and is not called by the application,

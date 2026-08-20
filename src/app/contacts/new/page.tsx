@@ -10,6 +10,7 @@ type NewContactPageProps = {
     firstName?: string;
     lastName?: string;
     source?: string;
+    contactType?: string;
   }>;
 };
 
@@ -36,6 +37,7 @@ export default async function NewContactPage({ searchParams }: NewContactPagePro
           first_name: params.firstName,
           last_name: params.lastName,
           source_inbox: params.source,
+          contact_type: params.contactType,
         }}
         defaultCompanyId={params.companyId}
         mode="create"

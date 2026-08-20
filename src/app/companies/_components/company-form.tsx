@@ -133,7 +133,7 @@ export function CompanyForm({
           className="crm-input min-h-32"
           defaultValue={company?.notes ?? ""}
           name="notes"
-          placeholder="Preferences, context, accessibility requirements..."
+          placeholder="General client notes and internal context..."
         />
       </label>
 
