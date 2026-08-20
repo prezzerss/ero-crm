@@ -16,10 +16,12 @@ export default async function RootLayout({
   const headersList = await headers();
   const pathname = headersList.get("x-pathname") ?? "";
   const isAuthRoute = pathname.startsWith("/sign-in") || pathname.startsWith("/auth/");
+  const isEmbeddedRoute = pathname.startsWith("/trello/power-up");
   const navItems = [
     { href: "/", label: "Dashboard" },
     { href: "/companies", label: "Clients" },
     { href: "/contacts", label: "Contacts" },
+    { href: "/projects", label: "Projects" },
     { href: "/inbox", label: "Inbox" },
     { href: "/mailing-lists", label: "Mailing lists" },
     { href: "/reporting", label: "Reporting" },
@@ -29,7 +31,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        {isAuthRoute ? (
+        {isAuthRoute || isEmbeddedRoute ? (
           children
         ) : (
           <div className="crm-shell">

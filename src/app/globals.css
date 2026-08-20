@@ -80,6 +80,13 @@ select {
   min-height: 100vh;
 }
 
+.trello-power-up-frame {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
 .crm-sidebar {
   position: relative;
   z-index: 1;

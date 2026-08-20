@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { formatContactType } from "@/lib/contact-types";
 import { formatStatus } from "@/lib/format";
 
 type CompanyRecord = {
@@ -13,6 +14,8 @@ type ContactRecord = {
   last_name?: string | null;
   email?: string | null;
   role?: string | null;
+  contact_type?: string | null;
+  is_default_quoting_contact?: boolean | null;
   status?: string | null;
   created_at?: string | null;
   companies?: CompanyRecord | CompanyRecord[] | null;
@@ -310,6 +313,7 @@ function matchesQuery(contact: ContactRecord, query: string) {
     getFullName(contact),
     contact.email,
     contact.role,
+    formatContactType(contact.contact_type),
     getCompanyName(contact),
     getStatus(contact),
     getSourceInbox(contact),
@@ -391,6 +395,9 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
   ).length;
   const projectsCount = contacts.filter((contact) => getSourceKey(contact) === "projects").length;
   const quotesCount = contacts.filter((contact) => getSourceKey(contact) === "quotes").length;
+  const quotingContactCount = contacts.filter(
+    (contact) => contact.contact_type === "quoting",
+  ).length;
   const enquiriesCount = contacts.filter(
     (contact) => getSourceKey(contact) === "enquiries",
   ).length;
@@ -437,8 +444,8 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
         </div>
 
         <div className="crm-card crm-kpi crm-kpi-orange p-5">
-          <p className="crm-muted font-bold">Quote leads</p>
-          <p className="mt-2 text-3xl font-black">{quotesCount}</p>
+          <p className="crm-muted font-bold">Quoting contacts</p>
+          <p className="mt-2 text-3xl font-black">{quotingContactCount}</p>
         </div>
 
         <div className="crm-card crm-kpi p-5">
@@ -523,6 +530,7 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
               <tr>
                 <th>Contact</th>
                 <th>Client</th>
+                <th>Type</th>
                 <th>Status</th>
                 <th>Source</th>
                 <th>Added</th>
@@ -554,6 +562,13 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
                     </td>
 
                     <td>
+                      <span className="crm-status-pill">
+                        {formatContactType(contact.contact_type)}
+                        {contact.is_default_quoting_contact ? " — Default" : ""}
+                      </span>
+                    </td>
+
+                    <td>
                       {company?.id ? (
                         <Link href={`/companies/${company.id}`} className="font-bold underline">
                           {getCompanyName(contact)}
@@ -578,7 +593,7 @@ export default async function ContactsPage({ searchParams }: ContactsPageProps) 
 
               {!sortedContacts.length && (
                 <tr>
-                  <td colSpan={5}>No contacts match these filters.</td>
+                  <td colSpan={6}>No contacts match these filters.</td>
                 </tr>
               )}
             </tbody>

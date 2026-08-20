@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { normaliseContactType } from "@/lib/contact-types";
 import { supabase } from "@/lib/supabase";
 
 const sourceInboxes = ["projects", "quotes", "enquiries", "manual"];
@@ -32,13 +33,17 @@ function cleanOption(
 }
 
 function buildContactPayload(formData: FormData, includeCrmColumns = true) {
-  const payload: Record<string, string | null> = {
+  const contactType = normaliseContactType(cleanString(formData.get("contact_type")));
+  const payload: Record<string, boolean | string | null> = {
     first_name: cleanString(formData.get("first_name")),
     last_name: cleanString(formData.get("last_name")),
     email: cleanString(formData.get("email")),
     role: cleanString(formData.get("role")),
     company_id: cleanString(formData.get("company_id")),
     status: cleanString(formData.get("status")) ?? "active",
+    contact_type: contactType,
+    is_default_quoting_contact:
+      contactType === "quoting" && formData.get("is_default_quoting_contact") === "on",
   };
 
   if (includeCrmColumns) {
@@ -55,9 +60,39 @@ function buildContactPayload(formData: FormData, includeCrmColumns = true) {
   return payload;
 }
 
+function validateContactTypeDetails(formData: FormData) {
+  const contactType = normaliseContactType(cleanString(formData.get("contact_type")));
+
+  if (contactType !== "quoting") {
+    return;
+  }
+
+  if (
+    !cleanString(formData.get("first_name")) &&
+    !cleanString(formData.get("last_name"))
+  ) {
+    throw new Error("A quoting contact must have a name.");
+  }
+
+  if (!cleanString(formData.get("company_id"))) {
+    throw new Error("A quoting contact must be linked to a client company.");
+  }
+
+  if (!cleanString(formData.get("email"))) {
+    throw new Error("A quoting contact must have an email address.");
+  }
+}
+
 function isMissingCrmColumnError(errorMessage: string) {
   return (
     /source_inbox|mailing_status|notes|updated_at/.test(errorMessage) &&
+    /column|schema cache|does not exist/i.test(errorMessage)
+  );
+}
+
+function isMissingContactTypeColumnError(errorMessage: string) {
+  return (
+    /contact_type|is_default_quoting_contact/.test(errorMessage) &&
     /column|schema cache|does not exist/i.test(errorMessage)
   );
 }
@@ -100,12 +135,20 @@ async function saveContactNotesIfPossible(contactId: string, formData: FormData)
 }
 
 export async function createContact(formData: FormData) {
+  validateContactTypeDetails(formData);
+
   let payload = buildContactPayload(formData);
   let { data, error } = await supabase
     .from("contacts")
     .insert(payload)
     .select("id")
     .single();
+
+  if (error && isMissingContactTypeColumnError(error.message)) {
+    throw new Error(
+      "Contact types are not available in Supabase yet. Run supabase/trello-crm-quoting-schema.sql, then retry.",
+    );
+  }
 
   if (error && isMissingCrmColumnError(error.message)) {
     payload = buildContactPayload(formData, false);
@@ -142,11 +185,19 @@ export async function createContact(formData: FormData) {
 }
 
 export async function updateContact(contactId: string, formData: FormData) {
+  validateContactTypeDetails(formData);
+
   let payload = buildContactPayload(formData);
   let { error } = await supabase
     .from("contacts")
     .update(payload)
     .eq("id", contactId);
+
+  if (error && isMissingContactTypeColumnError(error.message)) {
+    throw new Error(
+      "Contact types are not available in Supabase yet. Run supabase/trello-crm-quoting-schema.sql, then retry.",
+    );
+  }
 
   if (error && isMissingCrmColumnError(error.message)) {
     payload = buildContactPayload(formData, false);

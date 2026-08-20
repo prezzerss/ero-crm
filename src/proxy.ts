@@ -6,6 +6,8 @@ function isPublicPath(pathname: string) {
   return (
     pathname === "/sign-in" ||
     pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/integrations/") ||
+    pathname.startsWith("/trello/power-up") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico"
   );
